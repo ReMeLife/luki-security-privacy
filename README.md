@@ -40,7 +40,7 @@ All code here is **sensitive IP**. Do not expose externally.
 ~~~text
 luki_security_privacy/
 ├── README.md
-├── pyproject.toml
+├── requirements.txt
 ├── luki_sec/
 │   ├── __init__.py
 │   ├── config.py                 # toggle DP, FL, crypto backends
@@ -185,7 +185,7 @@ python -m luki_sec.federated.flower_server --rounds 5 --model_path models/base.p
 
 ## 13. License  
 **Proprietary – All Rights Reserved**  
-Copyright © 2025 Singularities Ltd / ReMeLife.  
+Copyright 2025 Singularities Ltd / ReMeLife.  
 Unauthorized copying, modification, distribution, or disclosure is strictly prohibited.
 
 ---
