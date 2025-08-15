@@ -225,7 +225,7 @@ class PIISanitizer:
         return match_text
     
     def sanitize_text(self, text: str, 
-                     redaction_rules: Dict[PIIType, RedactionMethod] = None,
+                     redaction_rules: Dict[PIIType, RedactionMethod] | None = None,
                      min_confidence: float = 0.7) -> Tuple[str, List[Dict[str, Any]]]:
         """
         Sanitize text by redacting PII
@@ -261,7 +261,7 @@ class PIISanitizer:
         return sanitized_text, detections
     
     def sanitize_dict(self, data: Dict[str, Any], 
-                     field_rules: Dict[str, Dict[PIIType, RedactionMethod]] = None) -> Dict[str, Any]:
+                     field_rules: Dict[str, Dict[PIIType, RedactionMethod]] | None = None) -> Dict[str, Any]:
         """Sanitize dictionary data"""
         sanitized = {}
         
@@ -313,7 +313,7 @@ def get_pii_sanitizer() -> PIISanitizer:
 
 
 def redact_pii(text: str, 
-               redaction_rules: Dict[PIIType, RedactionMethod] = None,
+               redaction_rules: Dict[PIIType, RedactionMethod] | None = None,
                min_confidence: float = 0.7) -> str:
     """Redact PII from text"""
     sanitizer = get_pii_sanitizer()

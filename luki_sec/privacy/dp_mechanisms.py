@@ -4,7 +4,7 @@ Noise addition, clipping, and privacy budget management
 """
 
 import numpy as np
-from typing import Union, List, Optional
+from typing import Union, List, Optional, Callable
 from enum import Enum
 import structlog
 
@@ -19,7 +19,7 @@ class NoiseType(str, Enum):
     GAUSSIAN = "gaussian"
 
 
-def laplace_noise(scale: float, size: Union[int, tuple] = None) -> Union[float, np.ndarray]:
+def laplace_noise(scale: float, size: Union[int, tuple, None] = None) -> Union[float, np.ndarray]:
     """
     Generate Laplace noise for differential privacy
     
@@ -33,7 +33,7 @@ def laplace_noise(scale: float, size: Union[int, tuple] = None) -> Union[float, 
     return np.random.laplace(0, scale, size)
 
 
-def gaussian_noise(scale: float, size: Union[int, tuple] = None) -> Union[float, np.ndarray]:
+def gaussian_noise(scale: float, size: Union[int, tuple, None] = None) -> Union[float, np.ndarray]:
     """
     Generate Gaussian noise for differential privacy
     
@@ -190,7 +190,7 @@ class DPQueryEngine:
         """Get existing DP mechanism"""
         return self.mechanisms.get(name)
     
-    def query_count(self, dataset: List[dict], filter_func: callable = None,
+    def query_count(self, dataset: List[dict], filter_func: Callable | None = None,
                    mechanism_name: str = "count") -> float:
         """Execute differentially private count query"""
         if mechanism_name not in self.mechanisms:

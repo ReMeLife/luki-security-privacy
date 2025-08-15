@@ -6,7 +6,8 @@ Toggles for DP, FL, crypto backends and security settings
 import os
 from enum import Enum
 from typing import Optional
-from pydantic import BaseSettings, Field
+from pydantic_settings import BaseSettings
+from pydantic import Field
 
 
 class CryptoBackend(str, Enum):

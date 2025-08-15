@@ -5,7 +5,7 @@ Password hashing, secure hashing, and data integrity
 
 import hashlib
 import secrets
-from typing import bytes, str as str_type
+from typing import List
 import bcrypt
 import structlog
 
@@ -17,7 +17,7 @@ class HashError(Exception):
     pass
 
 
-def hash_password(password: str_type, rounds: int = 12) -> str_type:
+def hash_password(password: str, rounds: int = 12) -> str:
     """
     Hash a password using bcrypt
     
@@ -39,7 +39,7 @@ def hash_password(password: str_type, rounds: int = 12) -> str_type:
         raise HashError(f"Password hashing failed: {str(e)}")
 
 
-def verify_password(password: str_type, hashed_password: str_type) -> bool:
+def verify_password(password: str, hashed_password: str) -> bool:
     """
     Verify a password against its hash
     
@@ -60,7 +60,7 @@ def verify_password(password: str_type, hashed_password: str_type) -> bool:
         return False
 
 
-def secure_hash(data: bytes, algorithm: str = 'sha256') -> str_type:
+def secure_hash(data: bytes, algorithm: str = 'sha256') -> str:
     """
     Create secure hash of data
     
@@ -89,12 +89,12 @@ def secure_hash(data: bytes, algorithm: str = 'sha256') -> str_type:
         raise HashError(f"Secure hashing failed: {str(e)}")
 
 
-def hash_string(text: str_type, algorithm: str = 'sha256') -> str_type:
+def hash_string(text: str, algorithm: str = 'sha256') -> str:
     """Hash a string using specified algorithm"""
     return secure_hash(text.encode('utf-8'), algorithm)
 
 
-def hmac_hash(key: bytes, data: bytes, algorithm: str = 'sha256') -> str_type:
+def hmac_hash(key: bytes, data: bytes, algorithm: str = 'sha256') -> str:
     """
     Create HMAC hash for message authentication
     
@@ -129,7 +129,7 @@ def generate_salt(length: int = 32) -> bytes:
     return secrets.token_bytes(length)
 
 
-def hash_with_salt(data: bytes, salt: bytes = None, algorithm: str = 'sha256') -> tuple[str_type, str_type]:
+def hash_with_salt(data: bytes, salt: bytes | None = None, algorithm: str = 'sha256') -> tuple[str, str]:
     """
     Hash data with salt
     
@@ -151,7 +151,7 @@ def hash_with_salt(data: bytes, salt: bytes = None, algorithm: str = 'sha256') -
     return hash_hex, salt_hex
 
 
-def verify_salted_hash(data: bytes, hash_hex: str_type, salt_hex: str_type, 
+def verify_salted_hash(data: bytes, hash_hex: str, salt_hex: str, 
                       algorithm: str = 'sha256') -> bool:
     """
     Verify data against salted hash
@@ -178,11 +178,11 @@ def verify_salted_hash(data: bytes, hash_hex: str_type, salt_hex: str_type,
 class HashChain:
     """Hash chain for tamper-evident logging"""
     
-    def __init__(self, initial_hash: str_type = None):
+    def __init__(self, initial_hash: str | None = None):
         self.current_hash = initial_hash or secure_hash(b"genesis")
         self.chain_length = 0
     
-    def add_entry(self, data: bytes) -> str_type:
+    def add_entry(self, data: bytes) -> str:
         """Add entry to hash chain"""
         combined = self.current_hash.encode('utf-8') + data
         self.current_hash = secure_hash(combined)
@@ -194,7 +194,7 @@ class HashChain:
         
         return self.current_hash
     
-    def verify_chain(self, entries: list[bytes], expected_final_hash: str_type) -> bool:
+    def verify_chain(self, entries: list[bytes], expected_final_hash: str) -> bool:
         """Verify integrity of hash chain"""
         temp_chain = HashChain(secure_hash(b"genesis"))
         
@@ -204,7 +204,7 @@ class HashChain:
         return temp_chain.current_hash == expected_final_hash
 
 
-def hash_pii_for_analytics(pii_data: str_type, salt: str_type = None) -> str_type:
+def hash_pii_for_analytics(pii_data: str, salt: str | None = None) -> str:
     """
     Hash PII data for analytics while preserving privacy
     
@@ -223,7 +223,7 @@ def hash_pii_for_analytics(pii_data: str_type, salt: str_type = None) -> str_typ
     return hash_string(combined, 'sha256')
 
 
-def create_data_fingerprint(data: dict) -> str_type:
+def create_data_fingerprint(data: dict) -> str:
     """
     Create deterministic fingerprint of data structure
     
@@ -240,7 +240,7 @@ def create_data_fingerprint(data: dict) -> str_type:
     return hash_string(normalized, 'sha256')
 
 
-def verify_data_integrity(data: bytes, expected_hash: str_type, 
+def verify_data_integrity(data: bytes, expected_hash: str, 
                          algorithm: str = 'sha256') -> bool:
     """
     Verify data integrity against expected hash

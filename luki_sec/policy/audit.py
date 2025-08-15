@@ -100,7 +100,7 @@ class AuditEvent(BaseModel):
         
         return json.dumps(audit_data, sort_keys=True, separators=(',', ':'))
     
-    def compute_hash(self, previous_hash: str = None) -> str:
+    def compute_hash(self, previous_hash: str | None = None) -> str:
         """Compute hash for integrity verification"""
         audit_string = self.to_audit_string()
         
@@ -121,10 +121,10 @@ class AuditLogger:
         self.config = get_security_config()
     
     def log_event(self, event_type: AuditEventType, action: str, outcome: str,
-                  user_id: str = None, role: str = None, session_id: str = None,
-                  resource_type: str = None, resource_id: str = None,
-                  ip_address: str = None, user_agent: str = None,
-                  location: str = None, details: Dict[str, Any] = None) -> AuditEvent:
+                  user_id: str | None = None, role: str | None = None, session_id: str | None = None,
+                  resource_type: str | None = None, resource_id: str | None = None,
+                  ip_address: str | None = None, user_agent: str | None = None,
+                  location: str | None = None, details: Dict[str, Any] | None = None) -> AuditEvent:
         """Log an audit event"""
         
         import uuid
@@ -164,8 +164,8 @@ class AuditLogger:
         return event
     
     def log_access(self, user_id: str, resource_type: str, resource_id: str,
-                  action: str, outcome: str, role: str = None,
-                  ip_address: str = None, details: Dict[str, Any] = None) -> AuditEvent:
+                  action: str, outcome: str, role: str | None = None,
+                  ip_address: str | None = None, details: Dict[str, Any] | None = None) -> AuditEvent:
         """Log data access event"""
         return self.log_event(
             event_type=AuditEventType.DATA_ACCESS,
@@ -180,8 +180,8 @@ class AuditLogger:
         )
     
     def log_authentication(self, user_id: str, outcome: str, 
-                          ip_address: str = None, user_agent: str = None,
-                          details: Dict[str, Any] = None) -> AuditEvent:
+                          ip_address: str | None = None, user_agent: str | None = None,
+                          details: Dict[str, Any] | None = None) -> AuditEvent:
         """Log authentication event"""
         event_type = AuditEventType.LOGIN_SUCCESS if outcome == "success" else AuditEventType.LOGIN_FAILURE
         
@@ -196,7 +196,7 @@ class AuditLogger:
         )
     
     def log_consent_action(self, user_id: str, action: str, scope: str,
-                          granted_by: str = None, details: Dict[str, Any] = None) -> AuditEvent:
+                          granted_by: str | None = None, details: Dict[str, Any] | None = None) -> AuditEvent:
         """Log consent-related action"""
         event_type = AuditEventType.CONSENT_GRANTED if action == "grant" else AuditEventType.CONSENT_REVOKED
         
@@ -213,7 +213,7 @@ class AuditLogger:
         )
     
     def log_security_event(self, event_type: AuditEventType, action: str,
-                          user_id: str = None, details: Dict[str, Any] = None) -> AuditEvent:
+                          user_id: str | None = None, details: Dict[str, Any] | None = None) -> AuditEvent:
         """Log security-related event"""
         return self.log_event(
             event_type=event_type,
@@ -223,13 +223,13 @@ class AuditLogger:
             details=details
         )
     
-    def get_events(self, user_id: str = None, event_type: AuditEventType = None,
-                  start_time: datetime = None, end_time: datetime = None,
+    def get_events(self, user_id: str | None = None, event_type: AuditEventType | None = None,
+                  start_time: datetime | None = None, end_time: datetime | None = None,
                   limit: int = 100) -> List[AuditEvent]:
         """Retrieve audit events with filters"""
         return self.storage.get_events(user_id, event_type, start_time, end_time, limit)
     
-    def verify_integrity(self, events: List[AuditEvent] = None) -> bool:
+    def verify_integrity(self, events: List[AuditEvent] | None = None) -> bool:
         """Verify audit trail integrity"""
         if events is None:
             events = self.storage.get_events(limit=10000)  # Get all events
@@ -257,9 +257,9 @@ class AuditLogger:
         logger.info("Audit integrity verified", event_count=len(events))
         return True
     
-    def export_audit_trail(self, user_id: str = None, 
-                          start_time: datetime = None,
-                          end_time: datetime = None) -> Dict[str, Any]:
+    def export_audit_trail(self, user_id: str | None = None, 
+                          start_time: datetime | None = None,
+                          end_time: datetime | None = None) -> Dict[str, Any]:
         """Export audit trail for compliance"""
         events = self.get_events(user_id, None, start_time, end_time, limit=10000)
         
@@ -285,8 +285,8 @@ class InMemoryAuditStorage:
         self.events.append(event)
         return True
     
-    def get_events(self, user_id: str = None, event_type: AuditEventType = None,
-                  start_time: datetime = None, end_time: datetime = None,
+    def get_events(self, user_id: str | None = None, event_type: AuditEventType | None = None,
+                  start_time: datetime | None = None, end_time: datetime | None = None,
                   limit: int = 100) -> List[AuditEvent]:
         """Get filtered audit events"""
         filtered_events = self.events
@@ -322,8 +322,8 @@ def get_audit_logger() -> AuditLogger:
 
 
 def log_access(user_id: str, resource_type: str, resource_id: str,
-              action: str, outcome: str, role: str = None,
-              ip_address: str = None, details: Dict[str, Any] = None) -> AuditEvent:
+              action: str, outcome: str, role: str | None = None,
+              ip_address: str | None = None, details: Dict[str, Any] | None = None) -> AuditEvent:
     """Log data access event"""
     return get_audit_logger().log_access(
         user_id, resource_type, resource_id, action, outcome, role, ip_address, details
@@ -331,8 +331,8 @@ def log_access(user_id: str, resource_type: str, resource_id: str,
 
 
 def log_authentication(user_id: str, outcome: str, 
-                      ip_address: str = None, user_agent: str = None,
-                      details: Dict[str, Any] = None) -> AuditEvent:
+                      ip_address: str | None = None, user_agent: str | None = None,
+                      details: Dict[str, Any] | None = None) -> AuditEvent:
     """Log authentication event"""
     return get_audit_logger().log_authentication(
         user_id, outcome, ip_address, user_agent, details
@@ -340,7 +340,7 @@ def log_authentication(user_id: str, outcome: str,
 
 
 def log_consent_action(user_id: str, action: str, scope: str,
-                      granted_by: str = None, details: Dict[str, Any] = None) -> AuditEvent:
+                      granted_by: str | None = None, details: Dict[str, Any] | None = None) -> AuditEvent:
     """Log consent action"""
     return get_audit_logger().log_consent_action(
         user_id, action, scope, granted_by, details

@@ -283,9 +283,9 @@ class ABACManager:
         return PolicyEffect.DENY
     
     def check_access(self, user_id: str, resource_id: str, action: str,
-                    user_attrs: Dict[str, Any] = None,
-                    resource_attrs: Dict[str, Any] = None,
-                    env_attrs: Dict[str, Any] = None) -> bool:
+                    user_attrs: Dict[str, Any] | None = None,
+                    resource_attrs: Dict[str, Any] | None = None,
+                    env_attrs: Dict[str, Any] | None = None) -> bool:
         """Convenience method to check access"""
         
         context = AttributeContext(
@@ -314,39 +314,41 @@ class AttributeExtractor:
     """Extract attributes from various sources"""
     
     @staticmethod
-    def extract_user_attributes(user_id: str, user_data: Dict[str, Any] = None) -> Dict[str, Any]:
+    def extract_user_attributes(user_id: str, user_data: Dict[str, Any] | None = None) -> Dict[str, Any]:
         """Extract user attributes"""
         attrs = {"user_id": user_id}
         
         if user_data:
-            attrs.update({
+            user_attrs = {
                 "role": user_data.get("role"),
                 "department": user_data.get("department"),
                 "clearance_level": user_data.get("clearance_level", 1),
                 "location": user_data.get("location"),
                 "last_login": user_data.get("last_login"),
-            })
+            }
+            attrs.update(user_attrs)
         
         return attrs
     
     @staticmethod
-    def extract_resource_attributes(resource_id: str, resource_data: Dict[str, Any] = None) -> Dict[str, Any]:
+    def extract_resource_attributes(resource_id: str, resource_data: Dict[str, Any] | None = None) -> Dict[str, Any]:
         """Extract resource attributes"""
         attrs = {"resource_id": resource_id}
         
         if resource_data:
-            attrs.update({
+            resource_attrs = {
                 "data_type": resource_data.get("data_type"),
                 "sensitivity": resource_data.get("sensitivity", "low"),
                 "owner_id": resource_data.get("owner_id"),
                 "classification": resource_data.get("classification"),
                 "created_at": resource_data.get("created_at"),
-            })
+            }
+            attrs.update(resource_attrs)
         
         return attrs
     
     @staticmethod
-    def extract_environment_attributes(request_data: Dict[str, Any] = None) -> Dict[str, Any]:
+    def extract_environment_attributes(request_data: Dict[str, Any] | None = None) -> Dict[str, Any]:
         """Extract environment attributes"""
         attrs = {}
         
@@ -375,9 +377,9 @@ def get_abac_manager() -> ABACManager:
 
 
 def check_abac_access(user_id: str, resource_id: str, action: str,
-                     user_attrs: Dict[str, Any] = None,
-                     resource_attrs: Dict[str, Any] = None,
-                     env_attrs: Dict[str, Any] = None) -> bool:
+                     user_attrs: Dict[str, Any] | None = None,
+                     resource_attrs: Dict[str, Any] | None = None,
+                     env_attrs: Dict[str, Any] | None = None) -> bool:
     """Check ABAC access"""
     return get_abac_manager().check_access(
         user_id, resource_id, action, user_attrs, resource_attrs, env_attrs

@@ -15,7 +15,7 @@ class QuasiIdentifier:
     """Quasi-identifier field definition"""
     
     def __init__(self, field_name: str, field_type: str = "categorical", 
-                 hierarchy: Dict[str, str] = None):
+                 hierarchy: Dict[str, str] | None = None):
         self.field_name = field_name
         self.field_type = field_type  # categorical, numeric, date
         self.hierarchy = hierarchy or {}  # Generalization hierarchy
@@ -130,7 +130,7 @@ class KAnonymizer:
         logger.info("Added quasi-identifier", field=qi.field_name, type=qi.field_type)
     
     def check_k_anonymity(self, data: List[Dict[str, Any]], 
-                         qi_fields: List[str] = None) -> Dict[str, Any]:
+                         qi_fields: List[str] | None = None) -> Dict[str, Any]:
         """
         Check k-anonymity of dataset
         
@@ -196,7 +196,7 @@ class KAnonymizer:
         return result
     
     def enforce_k_anonymity(self, data: List[Dict[str, Any]], 
-                           qi_fields: List[str] = None,
+                           qi_fields: List[str] | None = None,
                            max_generalization_level: int = 3) -> List[Dict[str, Any]]:
         """
         Enforce k-anonymity through generalization and suppression
@@ -286,7 +286,7 @@ class KAnonymizer:
         }
     
     def suggest_generalization(self, data: List[Dict[str, Any]], 
-                              qi_fields: List[str] = None) -> Dict[str, Any]:
+                              qi_fields: List[str] | None = None) -> Dict[str, Any]:
         """Suggest generalization strategy to achieve k-anonymity"""
         
         if qi_fields is None:
@@ -326,7 +326,7 @@ class KAnonymizer:
 
 
 def check_k_anonymity(data: List[Dict[str, Any]], k: int = 3, 
-                     qi_fields: List[str] = None) -> bool:
+                     qi_fields: List[str] | None = None) -> bool:
     """Convenience function to check k-anonymity"""
     anonymizer = KAnonymizer(k)
     analysis = anonymizer.check_k_anonymity(data, qi_fields)
@@ -334,7 +334,7 @@ def check_k_anonymity(data: List[Dict[str, Any]], k: int = 3,
 
 
 def enforce_k_anonymity(data: List[Dict[str, Any]], k: int = 3,
-                       qi_fields: List[str] = None) -> List[Dict[str, Any]]:
+                       qi_fields: List[str] | None = None) -> List[Dict[str, Any]]:
     """Convenience function to enforce k-anonymity"""
     anonymizer = KAnonymizer(k)
     return anonymizer.enforce_k_anonymity(data, qi_fields)

@@ -4,8 +4,11 @@ AES-GCM encryption for data at rest and in transit
 """
 
 import os
-from typing import bytes
+from typing import TYPE_CHECKING
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+if TYPE_CHECKING:
+    pass
 from cryptography.exceptions import InvalidTag
 import structlog
 
@@ -32,7 +35,7 @@ def generate_key(key_size: int = 256) -> bytes:
     return AESGCM.generate_key(bit_length=key_size)
 
 
-def encrypt_bytes(key: bytes, plaintext: bytes, associated_data: bytes = None) -> bytes:
+def encrypt_bytes(key: bytes, plaintext: bytes, associated_data: bytes | None = None) -> bytes:
     """
     Encrypt bytes using AES-GCM
     
@@ -61,7 +64,7 @@ def encrypt_bytes(key: bytes, plaintext: bytes, associated_data: bytes = None) -
         raise EncryptionError(f"Encryption failed: {str(e)}")
 
 
-def decrypt_bytes(key: bytes, encrypted_data: bytes, associated_data: bytes = None) -> bytes:
+def decrypt_bytes(key: bytes, encrypted_data: bytes, associated_data: bytes | None = None) -> bytes:
     """
     Decrypt bytes using AES-GCM
     
@@ -97,12 +100,12 @@ def decrypt_bytes(key: bytes, encrypted_data: bytes, associated_data: bytes = No
         raise DecryptionError(f"Decryption failed: {str(e)}")
 
 
-def encrypt_string(key: bytes, plaintext: str, associated_data: bytes = None) -> bytes:
+def encrypt_string(key: bytes, plaintext: str, associated_data: bytes | None = None) -> bytes:
     """Encrypt a string using AES-GCM"""
     return encrypt_bytes(key, plaintext.encode('utf-8'), associated_data)
 
 
-def decrypt_string(key: bytes, encrypted_data: bytes, associated_data: bytes = None) -> str:
+def decrypt_string(key: bytes, encrypted_data: bytes, associated_data: bytes | None = None) -> str:
     """Decrypt to a string using AES-GCM"""
     plaintext_bytes = decrypt_bytes(key, encrypted_data, associated_data)
     return plaintext_bytes.decode('utf-8')
