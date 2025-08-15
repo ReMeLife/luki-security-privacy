@@ -4,11 +4,11 @@ Database adapters for consent record persistence
 """
 
 from typing import Optional, List, Dict, Any
-from datetime import datetime
+from datetime import datetime, UTC
 import json
 import structlog
 from sqlalchemy import create_engine, Column, String, DateTime, Text, Boolean
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 
 from .models import ConsentRecord, ConsentBundle, ConsentScope, ConsentStatus
@@ -40,7 +40,7 @@ class ConsentRecordDB(Base):
     
     legal_basis = Column(String, nullable=False)
     purpose = Column(Text, nullable=False)
-    metadata = Column(Text)  # JSON string
+    consent_metadata = Column(Text)  # JSON string
 
 
 class ConsentStorage:
@@ -73,15 +73,15 @@ class ConsentStorage:
             user_agent=consent.user_agent,
             legal_basis=consent.legal_basis,
             purpose=consent.purpose,
-            metadata=json.dumps(consent.metadata) if consent.metadata else None
+            consent_metadata=json.dumps(consent.metadata) if consent.metadata else None
         )
     
     def _from_db_model(self, db_consent: ConsentRecordDB) -> ConsentRecord:
         """Convert database model to ConsentRecord"""
         metadata = {}
-        if db_consent.metadata:
+        if db_consent.consent_metadata:
             try:
-                metadata = json.loads(db_consent.metadata)
+                metadata = json.loads(db_consent.consent_metadata)
             except json.JSONDecodeError:
                 logger.warning("Invalid metadata JSON", consent_id=db_consent.id)
         
@@ -141,7 +141,7 @@ class ConsentStorage:
                 db_consent.user_agent = consent.user_agent
                 db_consent.legal_basis = consent.legal_basis
                 db_consent.purpose = consent.purpose
-                db_consent.metadata = json.dumps(consent.metadata) if consent.metadata else None
+                db_consent.consent_metadata = json.dumps(consent.metadata) if consent.metadata else None
                 
                 session.commit()
                 
@@ -216,7 +216,7 @@ class ConsentStorage:
         """Clean up expired consent records"""
         try:
             with self.SessionLocal() as session:
-                now = datetime.utcnow()
+                now = datetime.now(UTC)
                 
                 # Mark expired consents
                 expired_consents = session.query(ConsentRecordDB).filter(

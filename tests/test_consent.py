@@ -3,7 +3,7 @@ Tests for consent management module
 """
 
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from luki_sec.consent.models import ConsentRecord, ConsentScope, ConsentStatus, ConsentBundle
 from luki_sec.consent.engine import ConsentEngine, ConsentDeniedError, ConsentExpiredError
 from luki_sec.consent.storage import InMemoryConsentStorage
@@ -65,7 +65,7 @@ class TestConsentModels:
         
         # Grant with short expiry
         consent.grant("admin", expires_in_days=0)
-        consent.expires_at = datetime.utcnow() - timedelta(minutes=1)
+        consent.expires_at = datetime.now(UTC) - timedelta(minutes=1)
         
         assert not consent.is_valid()
 
@@ -136,7 +136,7 @@ class TestConsentEngine:
         )
         
         # Manually expire
-        consent.expires_at = datetime.utcnow() - timedelta(minutes=1)
+        consent.expires_at = datetime.now(UTC) - timedelta(minutes=1)
         self.storage.update_consent(consent)
         
         # Should raise exception for expired consent

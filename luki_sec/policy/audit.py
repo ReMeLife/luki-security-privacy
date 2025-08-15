@@ -4,9 +4,9 @@ Immutable audit trail for security and compliance
 """
 
 from typing import Dict, Any, Optional, List
-from datetime import datetime
+from datetime import datetime, UTC
 from enum import Enum
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import json
 import structlog
 
@@ -55,7 +55,7 @@ class AuditEvent(BaseModel):
     """Individual audit event"""
     id: str
     event_type: AuditEventType
-    timestamp: datetime = datetime.utcnow()
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
     
     # Actor information
     user_id: Optional[str] = None
@@ -264,12 +264,12 @@ class AuditLogger:
         events = self.get_events(user_id, None, start_time, end_time, limit=10000)
         
         return {
-            "export_timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "user_id": user_id,
             "start_time": start_time.isoformat() if start_time else None,
             "end_time": end_time.isoformat() if end_time else None,
             "event_count": len(events),
-            "events": [event.dict() for event in events],
+            "events": [event.model_dump() for event in events],
             "integrity_verified": self.verify_integrity(events)
         }
 

@@ -4,9 +4,9 @@ Context-aware access control using attributes and policies
 """
 
 from typing import Dict, Any, List, Optional, Callable
-from datetime import datetime, time
+from datetime import datetime, UTC, time
 from enum import Enum
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import structlog
 
 logger = structlog.get_logger(__name__)
@@ -99,7 +99,7 @@ class PolicyCondition(BaseModel):
                 
         except Exception as e:
             logger.error("Condition evaluation failed", 
-                        condition=self.dict(), error=str(e))
+                        condition=self.model_dump(), error=str(e))
             return False
 
 
@@ -112,7 +112,7 @@ class PolicyRule(BaseModel):
     conditions: List[PolicyCondition]
     priority: int = 0
     is_active: bool = True
-    created_at: datetime = datetime.utcnow()
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     
     def evaluate(self, context: AttributeContext) -> Optional[PolicyEffect]:
         """Evaluate rule against context"""

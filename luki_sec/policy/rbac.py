@@ -5,8 +5,8 @@ User roles, permissions, and access control enforcement
 
 from enum import Enum
 from typing import Set, Dict, List, Optional
-from datetime import datetime
-from pydantic import BaseModel
+from datetime import datetime, UTC
+from pydantic import BaseModel, Field
 import structlog
 
 logger = structlog.get_logger(__name__)
@@ -56,7 +56,7 @@ class Role(BaseModel):
     description: str
     permissions: Set[Permission]
     is_active: bool = True
-    created_at: datetime = datetime.utcnow()
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     
     def has_permission(self, permission: Permission) -> bool:
         """Check if role has specific permission"""
@@ -75,7 +75,7 @@ class UserRole(BaseModel):
     """User role assignment"""
     user_id: str
     role_name: str
-    assigned_at: datetime = datetime.utcnow()
+    assigned_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     assigned_by: str
     expires_at: Optional[datetime] = None
     is_active: bool = True
@@ -85,7 +85,7 @@ class UserRole(BaseModel):
         if not self.is_active:
             return False
         
-        if self.expires_at and datetime.utcnow() > self.expires_at:
+        if self.expires_at and datetime.now(UTC) > self.expires_at:
             return False
         
         return True

@@ -66,9 +66,7 @@ class SecurityConfig(BaseSettings):
     debug_mode: bool = Field(default=False)
     log_level: str = Field(default="INFO")
     
-    class Config:
-        env_prefix = "LUKI_SEC_"
-        case_sensitive = False
+    model_config = {"env_prefix": "LUKI_SEC_", "case_sensitive": False}
 
 
 # Global configuration instance

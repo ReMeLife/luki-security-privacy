@@ -4,7 +4,7 @@ Runtime consent checking and enforcement logic
 """
 
 from typing import List, Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, UTC
 import structlog
 
 from .models import ConsentScope, ConsentRecord, ConsentBundle, ConsentStatus
@@ -74,7 +74,7 @@ class ConsentEngine:
                 
                 if not consent.is_valid():
                     # Auto-expire if past expiration
-                    if consent.expires_at and datetime.utcnow() > consent.expires_at:
+                    if consent.expires_at and datetime.now(UTC) > consent.expires_at:
                         consent.expire()
                         self.storage.update_consent(consent)
                         raise ConsentExpiredError(f"Consent expired for scope {scope}")
@@ -157,8 +157,8 @@ class ConsentEngine:
         
         return {
             "user_id": user_id,
-            "exported_at": datetime.utcnow().isoformat(),
-            "consents": [consent.dict() for consent in consent_bundle.consents]
+            "exported_at": datetime.now(UTC).isoformat(),
+            "consents": [consent.model_dump() for consent in consent_bundle.consents]
         }
 
 

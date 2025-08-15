@@ -3,7 +3,7 @@ Consent data models for LUKi
 GDPR/HIPAA compliant consent record structures
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from enum import Enum
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
@@ -51,8 +51,8 @@ class ConsentRecord(BaseModel):
     granted_at: Optional[datetime] = Field(default=None)
     revoked_at: Optional[datetime] = Field(default=None)
     expires_at: Optional[datetime] = Field(default=None)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     
     # Audit trail
     granted_by: Optional[str] = Field(default=None, description="Who granted consent")
@@ -72,7 +72,7 @@ class ConsentRecord(BaseModel):
         if self.status != ConsentStatus.GRANTED:
             return False
             
-        if self.expires_at and datetime.utcnow() > self.expires_at:
+        if self.expires_at and datetime.now(UTC) > self.expires_at:
             return False
             
         return True
@@ -81,32 +81,32 @@ class ConsentRecord(BaseModel):
               user_agent: Optional[str] = None, expires_in_days: int = 365) -> None:
         """Grant consent"""
         self.status = ConsentStatus.GRANTED
-        self.granted_at = datetime.utcnow()
+        self.granted_at = datetime.now(UTC)
         self.granted_by = granted_by
         self.ip_address = ip_address
         self.user_agent = user_agent
-        self.expires_at = datetime.utcnow() + timedelta(days=expires_in_days)
-        self.updated_at = datetime.utcnow()
+        self.expires_at = datetime.now(UTC) + timedelta(days=expires_in_days)
+        self.updated_at = datetime.now(UTC)
     
     def revoke(self, revoked_by: str) -> None:
         """Revoke consent"""
         self.status = ConsentStatus.REVOKED
-        self.revoked_at = datetime.utcnow()
+        self.revoked_at = datetime.now(UTC)
         self.revoked_by = revoked_by
-        self.updated_at = datetime.utcnow()
+        self.updated_at = datetime.now(UTC)
     
     def expire(self) -> None:
         """Mark consent as expired"""
         self.status = ConsentStatus.EXPIRED
-        self.updated_at = datetime.utcnow()
+        self.updated_at = datetime.now(UTC)
 
 
 class ConsentBundle(BaseModel):
     """Collection of related consent records"""
     user_id: str
     consents: List[ConsentRecord] = Field(default_factory=list)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     
     def get_consent(self, scope: ConsentScope) -> Optional[ConsentRecord]:
         """Get consent record for specific scope"""
