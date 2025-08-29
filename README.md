@@ -4,6 +4,12 @@
 
 ---
 
+## License
+
+This project is licensed under the [Apache 2.0 License with ReMeLife custom clauses]
+
+---
+
 ## 1. Overview  
 This repo centralises the **security and privacy layer** for the LUKi ecosystem. It provides:
 
