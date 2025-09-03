@@ -10,7 +10,7 @@ This repo centralises the **security and privacy layer** for the LUKi ecosystem.
 - Cryptographic utilities (hashing, signing, key rotation)  
 - Consent & policy enforcement helpers (GDPR/HIPAA alignment)  
 - Differential Privacy (DP) primitives and dataset sanitisation tools  
-- Federated Learning (FL) orchestration glue (e.g., Flower/PySyft integration)  
+- Federated Learning (FL) orchestration framework (roadmap - Flower/PySyft integration planned)  
 - Anomaly detection hooks for data misuse and API abuse
 
 All code here is **sensitive IP**. Do not expose externally.
@@ -22,7 +22,7 @@ All code here is **sensitive IP**. Do not expose externally.
 - **Policy Enforcement** – Role-based access (RBAC), attribute-based (ABAC) checks, audit logging.  
 - **Crypto Toolkit** – JWT signing/verification, HMACs, encryption-at-rest helpers (AES-GCM), key derivation.  
 - **Differential Privacy** – Noise mechanisms (Laplace/Gaussian), clipping, aggregation wrappers.  
-- **Federated Learning Orchestration** – Client/server wrappers for Flower/PySyft, secure aggregation protocols.  
+- **Federated Learning Orchestration** – Framework for future FL implementation (Flower/PySyft integration planned).  
 - **Anomaly Detection** – Simple unsupervised detectors to spot unusual access patterns or data drifts.
 
 ---
