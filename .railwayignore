@@ -1,0 +1,39 @@
+# Railway-specific ignore file
+# Environment files should be set as Railway environment variables instead
+.env
+.env.*
+
+# Security files (should be managed via Railway secrets)
+*.pem
+*.key
+*.crt
+keys/
+certs/
+secrets/
+
+# Development files
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs and cache (Railway handles logging)
+logs/
+*.log
+.cache/
+
+# Git files
+.git/
+.gitignore
