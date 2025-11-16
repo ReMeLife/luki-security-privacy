@@ -9,6 +9,8 @@ from contextlib import asynccontextmanager
 from typing import List, Dict, Any
 import logging
 import structlog
+import json
+import base64
 
 from pydantic import BaseModel, Field
 
@@ -19,37 +21,15 @@ from .consent.engine import (
     ConsentDeniedError,
     ConsentExpiredError,
 )
-
-# Try to import modules, fall back to mock classes if not available
-try:
-    from .consent.manager import ConsentManager
-except ImportError:
-    class ConsentManager:
-        async def update_consent(self, user_id: str, consent_data: dict):
-            return {"status": "mock", "user_id": user_id, "data": consent_data}
-        
-        async def get_consent(self, user_id: str):
-            return {"user_id": user_id, "consent": {"analytics": True, "marketing": False}}
-
-try:
-    from .privacy.controls import PrivacyControls
-except ImportError:
-    class PrivacyControls:
-        async def update_settings(self, user_id: str, settings: dict):
-            return {"status": "mock", "user_id": user_id, "settings": settings}
-        
-        async def get_settings(self, user_id: str):
-            return {"user_id": user_id, "privacy_level": "medium", "data_retention": 30}
-
-try:
-    from .crypto.encryption import EncryptionService
-except ImportError:
-    class EncryptionService:
-        async def encrypt(self, data: dict):
-            return "mock_encrypted_" + str(hash(str(data)))
-        
-        async def decrypt(self, encrypted_data: str):
-            return {"decrypted": "mock_data", "original": encrypted_data}
+from .consent.manager import ConsentManager
+from .privacy.controls import PrivacyControls
+from .crypto.encrypt import (
+    encrypt_bytes,
+    decrypt_bytes,
+    generate_key,
+    EncryptionError,
+    DecryptionError,
+)
 
 # Configure structured logging
 structlog.configure(
@@ -78,6 +58,33 @@ settings = SecurityConfig()
 consent_manager = None
 privacy_controls = None
 encryption_service = None
+
+
+class EncryptionService:
+    """AES-GCM based encryption service using a process-local key."""
+
+    def __init__(self) -> None:
+        self._key = generate_key(settings.encryption_key_size)
+
+    async def encrypt(self, data: Dict[str, Any]) -> str:
+        """Encrypt a JSON-serializable dict and return base64 string."""
+        try:
+            plaintext = json.dumps(data, separators=(",", ":")).encode("utf-8")
+            encrypted = encrypt_bytes(self._key, plaintext)
+            return base64.b64encode(encrypted).decode("ascii")
+        except EncryptionError as exc:
+            logger.error("Encryption service failed", error=str(exc))
+            raise
+
+    async def decrypt(self, encrypted_data: str) -> Dict[str, Any]:
+        """Decrypt a base64-encoded string back into a dict."""
+        try:
+            raw = base64.b64decode(encrypted_data.encode("ascii"))
+            plaintext = decrypt_bytes(self._key, raw)
+            return json.loads(plaintext.decode("utf-8"))
+        except (DecryptionError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+            logger.error("Decryption service failed", error=str(exc))
+            raise
 
 
 class PolicyEnforcementRequest(BaseModel):

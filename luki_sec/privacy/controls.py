@@ -7,8 +7,8 @@ import structlog
 from datetime import datetime, UTC
 
 from pydantic import BaseModel, Field
-from sqlalchemy import create_engine, Column, String, Integer, Boolean, DateTime, Text
-from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy import create_engine, String, Integer, Boolean, DateTime, Text
+from sqlalchemy.orm import declarative_base, sessionmaker, Mapped, mapped_column
 
 from ..config import get_security_config
 
@@ -20,16 +20,16 @@ Base = declarative_base()
 class PrivacySettingsDB(Base):
     __tablename__ = "privacy_settings"
 
-    user_id = Column(String, primary_key=True)
-    privacy_level = Column(String, nullable=False)
-    data_retention_days = Column(Integer, nullable=False)
-    anonymize_data = Column(Boolean, nullable=False)
-    allow_analytics = Column(Boolean, nullable=False)
-    allow_personalization = Column(Boolean, nullable=False)
-    allow_research = Column(Boolean, nullable=False)
-    extra = Column(Text)
-    created_at = Column(DateTime, nullable=False)
-    updated_at = Column(DateTime, nullable=False)
+    user_id: Mapped[str] = mapped_column(String, primary_key=True)
+    privacy_level: Mapped[str] = mapped_column(String, nullable=False)
+    data_retention_days: Mapped[int] = mapped_column(Integer, nullable=False)
+    anonymize_data: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    allow_analytics: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    allow_personalization: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    allow_research: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    extra: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
 
 class PrivacySettings(BaseModel):
