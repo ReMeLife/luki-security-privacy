@@ -6,10 +6,19 @@ Provides consent management, privacy controls, and security features
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+from typing import List, Dict, Any
 import logging
 import structlog
 
+from pydantic import BaseModel, Field
+
 from .config import SecurityConfig
+from .consent.models import ConsentScope
+from .consent.engine import (
+    get_consent_engine,
+    ConsentDeniedError,
+    ConsentExpiredError,
+)
 
 # Try to import modules, fall back to mock classes if not available
 try:
@@ -69,6 +78,13 @@ settings = SecurityConfig()
 consent_manager = None
 privacy_controls = None
 encryption_service = None
+
+
+class PolicyEnforcementRequest(BaseModel):
+    user_id: str
+    requester_role: str
+    requested_scopes: List[str] = Field(default_factory=list)
+    context: Dict[str, Any] = Field(default_factory=dict)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -206,6 +222,67 @@ async def decrypt_data(encrypted_data: str):
     except Exception as e:
         logger.error("Failed to decrypt data", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/policy/enforce")
+async def enforce_policy(request: PolicyEnforcementRequest):
+    if not request.requested_scopes:
+        return {
+            "allowed": True,
+            "scopes_checked": [],
+            "reason": "no_scopes_requested",
+        }
+
+    scopes: List[ConsentScope] = []
+    invalid_scopes: List[str] = []
+
+    for raw in request.requested_scopes:
+        try:
+            scopes.append(ConsentScope(raw))
+        except ValueError:
+            invalid_scopes.append(raw)
+
+    if invalid_scopes:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "invalid_scopes", "scopes": invalid_scopes},
+        )
+
+    engine = get_consent_engine()
+
+    try:
+        engine.enforce_scope(request.user_id, request.requester_role, scopes)
+        return {
+            "allowed": True,
+            "scopes_checked": [s.value for s in scopes],
+            "reason": "consent_valid",
+        }
+    except ConsentExpiredError as exc:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "consent_expired",
+                "message": str(exc),
+                "scopes_checked": [s.value for s in scopes],
+            },
+        )
+    except ConsentDeniedError as exc:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "consent_denied",
+                "message": str(exc),
+                "scopes_checked": [s.value for s in scopes],
+            },
+        )
+    except Exception as exc:
+        logger.error(
+            "Policy enforcement failed",
+            user_id=request.user_id,
+            requester_role=request.requester_role,
+            error=str(exc),
+        )
+        raise HTTPException(status_code=500, detail="Failed to enforce policy")
 
 @app.get("/")
 async def root():
