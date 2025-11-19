@@ -101,10 +101,13 @@ async def lifespan(app: FastAPI):
     logger.info("Starting LUKi Security & Privacy Module", version="0.1.0")
     
     try:
-        # Initialize services
-        consent_manager = ConsentManager()
-        privacy_controls = PrivacyControls()
-        encryption_service = EncryptionService()
+        # Initialize services only if not already provided (for testing/injection)
+        if consent_manager is None:
+            consent_manager = ConsentManager()
+        if privacy_controls is None:
+            privacy_controls = PrivacyControls()
+        if encryption_service is None:
+            encryption_service = EncryptionService()
         
         logger.info("✅ Security services initialized successfully")
         
