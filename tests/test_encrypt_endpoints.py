@@ -6,9 +6,12 @@ from typing import Dict, Any
 
 from fastapi.testclient import TestClient
 
-from luki_sec.main import app
+from luki_sec.main import app, EncryptionService
 import luki_sec.main as main_mod
 
+
+if main_mod.encryption_service is None:
+    main_mod.encryption_service = EncryptionService()
 
 client = TestClient(app)
 
