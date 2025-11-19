@@ -90,6 +90,15 @@ python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 ~~~
 
+### HTTP API overview (MVP)
+- `/health` – Service health and component readiness (consent manager, privacy controls, encryption service).
+- `/consent/{user_id}` – `POST` to update a user's consent bundle, `GET` to retrieve current consents and valid scopes.
+- `/privacy/{user_id}/settings` – `POST` to update privacy settings (e.g. analytics/personalization flags), `GET` to read them.
+- `/encrypt` – `POST` a JSON object (`{"key": "value"}`) and receive an `encrypted_data` blob (base64) for storage or transit.
+- `/decrypt` – `POST` the `encrypted_data` string and receive the original JSON object back as `decrypted_data`.
+- `/policy/enforce` – `POST` a policy request (`user_id`, `requester_role`, `requested_scopes`, optional `context`) and receive an
+  allow/deny decision with a machine-readable reason (e.g. `consent_valid`, `consent_denied`, `no_scopes_requested`).
+
 ### Consent check example  
 ~~~python
 from luki_sec.consent.engine import enforce_scope
