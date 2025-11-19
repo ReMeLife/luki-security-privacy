@@ -216,6 +216,11 @@ keys/
 certs/
 secrets/
 
+# Local databases (dev/test)
+*.db
+*.sqlite
+*.sqlite3
+
 logs/
 .cache/
 .ipynb_checkpoints/

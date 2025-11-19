@@ -1,0 +1,17 @@
+[build]
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
+watchPatterns = [
+  "luki_sec/**",
+  "requirements.txt",
+  "requirements-railway.txt",
+  "Dockerfile",
+  "Procfile",
+  "OPEN_SOURCE_READINESS.md"
+]
+
+[deploy]
+healthcheckPath = "/health"
+healthcheckTimeout = 300
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3

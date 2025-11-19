@@ -1,6 +1,6 @@
 # luki-security-privacy  
 *Security, consent, federated learning & privacy-preserving ML utilities for LUKi*  
-**PRIVATE / PROPRIETARY – Internal use only**
+**Security-critical module – review carefully before production use**
 
 ---
 
@@ -13,7 +13,7 @@ This repo centralises the **security and privacy layer** for the LUKi ecosystem.
 - Federated Learning (FL) orchestration framework (roadmap - Flower/PySyft integration planned)  
 - Anomaly detection hooks for data misuse and API abuse
 
-All code here is **sensitive IP**. Do not expose externally.
+The code is designed to be **auditable and security-focused**. It should be safe to open‑source, **provided that real keys, secrets, and environment-specific configuration are never committed**. All secrets must be supplied via environment variables or a secret manager (e.g. Railway secrets, Vault, KMS).
 
 ---
 
@@ -37,48 +37,52 @@ All code here is **sensitive IP**. Do not expose externally.
 ---
 
 ## 4. Repository Structure  
+Current MVP layout (actual code):
+
 ~~~text
-luki_security_privacy/
+luki-security-privacy/
+├── Dockerfile
 ├── README.md
 ├── requirements.txt
 ├── luki_sec/
 │   ├── __init__.py
 │   ├── config.py                 # toggle DP, FL, crypto backends
+│   ├── main.py                   # FastAPI app wiring consent, privacy, crypto, policy
 │   ├── consent/
 │   │   ├── models.py             # ConsentRecord, Scope enums
 │   │   ├── engine.py             # check_consent(), enforce_scope()
-│   │   └── storage.py            # consent DB adapters
+│   │   ├── manager.py            # async update/get wrappers used by FastAPI
+│   │   └── storage.py            # consent DB adapters (SQLite dev backend)
 │   ├── policy/
 │   │   ├── rbac.py               # roles, permissions
 │   │   ├── abac.py               # attribute-based checks
 │   │   └── audit.py              # write immutable audit logs
 │   ├── crypto/
-│   │   ├── keys.py               # key mgmt, rotation
+│   │   ├── keys.py               # key mgmt, rotation; master key via env/KMS
 │   │   ├── jwt.py                # JWT issue/verify
 │   │   ├── encrypt.py            # AES-GCM wrappers
 │   │   └── hash.py               # hashing, salting
 │   ├── privacy/
+│   │   ├── controls.py           # PrivacySettings CRUD + FastAPI integration
 │   │   ├── dp_mechanisms.py      # Laplace/Gaussian noise, clipping utils
 │   │   ├── sanitisers.py         # PII redaction / tokenisation
 │   │   └── k_anonymity.py        # simple k-anon/quasi-identifier checks
-│   ├── federated/
-│   │   ├── flower_server.py      # FL server launcher
-│   │   ├── flower_client.py      # FL client wrapper
-│   │   ├── secure_agg.py         # additive masking / SecAgg protocols
-│   │   └── datasets/             # synthetic demo datasets
-│   ├── anomaly/
-│   │   ├── detectors.py          # access/log anomaly detection
-│   │   └── training.py           # fit/refresh models
 │   └── utils/
 │       └── ids.py
-├── scripts/
-│   ├── run_fl_server.sh
-│   ├── rotate_keys.py
-│   └── backfill_consent.py
-└── tests/
-    ├── unit/
-    └── integration/
+├── tests/
+│   ├── test_consent.py           # Consent models & engine
+│   ├── test_consent_manager.py   # ConsentManager integration
+│   ├── test_encrypt_endpoints.py # /encrypt + /decrypt HTTP endpoints
+│   ├── test_policy_enforce.py    # /policy/enforce HTTP behaviour
+│   └── test_privacy_controls.py  # PrivacyControls + /privacy endpoints
+└── test_privacy_endpoints.db     # Local SQLite DB used in some tests (dev artefact)
 ~~~
+
+Planned/roadmap modules (not yet implemented in this repo, but referenced in docs):
+
+- `luki_sec/federated/` – Flower/PySyft integration, secure aggregation, demo datasets.  
+- `luki_sec/anomaly/` – detectors and training utilities for unusual access/log patterns.  
+- `scripts/*.py` – helpers for key rotation, consent backfill, and FL orchestration.
 
 ---
 
@@ -115,7 +119,7 @@ enforce_scope(
 ### Encrypt / decrypt blob  
 ~~~python
 from luki_sec.crypto.encrypt import encrypt_bytes, decrypt_bytes
-key = b"\x00"*32  # fetch from KMS in prod
+key = b"\x00" * 32  # placeholder; fetch from KMS or env in prod
 cipher = encrypt_bytes(key, b"Sensitive text")
 plain = decrypt_bytes(key, cipher)
 assert plain == b"Sensitive text"
@@ -185,17 +189,34 @@ python -m luki_sec.federated.flower_server --rounds 5 --model_path models/base.p
 
 ---
 
-## 12. Contributing (Internal Only)  
-- Feature branches `sec/<feature>` or `privacy/<feature>`  
-- Add threat model updates & DPIA notes when touching sensitive code  
-- Mandatory code review by security lead
+## 12. Contributing  
+
+This module is intended to be **auditable and community-reviewable**. Suggested workflow:
+
+- Use feature branches such as `sec/<feature>` or `privacy/<feature>`.  
+- When touching sensitive code (crypto, consent, policy, DP, FL), update threat models / DPIA notes where applicable.  
+- Add or update tests for new behaviours (especially around `/policy/enforce`, `/consent`, `/privacy`, `/encrypt`, `/decrypt`).  
+- Open a PR with a clear description of:
+  - What changed.
+  - Any new configuration or environment variables.
+  - Any migration considerations (e.g. new DB tables or consent scopes).
 
 ---
 
 ## 13. License  
-**Proprietary – All Rights Reserved**  
-Copyright 2025 Singularities Ltd / ReMeLife.  
-Unauthorized copying, modification, distribution, or disclosure is strictly prohibited.
+
+This project is licensed under the **Apache License, Version 2.0** ("Apache-2.0").  
+You may not use this project except in compliance with the License.
+
+You can obtain a copy of the License at:
+
+  http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an **"AS IS" BASIS,**
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  
+See the `LICENSE` file in this repository for the full text of the
+Apache-2.0 license.
 
 ---
 
