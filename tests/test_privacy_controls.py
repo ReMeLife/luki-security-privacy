@@ -48,7 +48,7 @@ class TestPrivacyControls:
 
 class TestPrivacyEndpoints:
     def setup_method(self) -> None:
-        storage = PrivacyStorage(database_url="sqlite:///:memory:")
+        storage = PrivacyStorage(database_url="sqlite:///test_privacy_endpoints.db")
         controls = PrivacyControls(storage=storage)
         main_mod.privacy_controls = controls
         self.client = TestClient(app)
