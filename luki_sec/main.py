@@ -93,6 +93,23 @@ class PolicyEnforcementRequest(BaseModel):
     requested_scopes: List[str] = Field(default_factory=list)
     context: Dict[str, Any] = Field(default_factory=dict)
 
+
+class SecurityConfigOut(BaseModel):
+    """Subset of security configuration exposed via API for admin/ops UI."""
+
+    crypto_backend: str
+    dp_mechanism: str
+    fl_backend: str
+    consent_expiry_days: int
+    audit_retention_days: int
+    rbac_enabled: bool
+    abac_enabled: bool
+    anomaly_detection_enabled: bool
+    anomaly_threshold: float
+    anomaly_retrain_days: int
+    debug_mode: bool
+    log_level: str
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager"""
@@ -152,6 +169,30 @@ async def health_check():
     }
     
     return status
+
+
+@app.get("/security/config", response_model=SecurityConfigOut)
+async def get_security_config():
+    """Return a sanitized view of security configuration for admin/ops tools.
+
+    This is intended for internal dashboards and configuration UIs; it should
+    not be exposed directly to end users.
+    """
+
+    return SecurityConfigOut(
+        crypto_backend=str(settings.crypto_backend),
+        dp_mechanism=str(settings.dp_mechanism),
+        fl_backend=str(settings.fl_backend),
+        consent_expiry_days=settings.consent_expiry_days,
+        audit_retention_days=settings.audit_retention_days,
+        rbac_enabled=settings.rbac_enabled,
+        abac_enabled=settings.abac_enabled,
+        anomaly_detection_enabled=settings.anomaly_detection_enabled,
+        anomaly_threshold=settings.anomaly_threshold,
+        anomaly_retrain_days=settings.anomaly_retrain_days,
+        debug_mode=settings.debug_mode,
+        log_level=settings.log_level,
+    )
 
 @app.post("/consent/{user_id}")
 async def update_consent(user_id: str, consent_data: dict):
