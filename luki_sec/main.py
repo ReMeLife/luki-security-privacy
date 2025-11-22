@@ -298,6 +298,55 @@ async def enforce_policy(request: PolicyEnforcementRequest):
             status_code=400,
             detail={"error": "invalid_scopes", "scopes": invalid_scopes},
         )
+    if privacy_controls is not None:
+        try:
+            privacy_settings = await privacy_controls.get_settings(request.user_id)
+            analytics_scopes = {
+                ConsentScope.ANALYTICS,
+                ConsentScope.DIFFERENTIAL_PRIVACY,
+            }
+            personalization_scopes = {ConsentScope.PERSONALIZATION}
+            research_scopes = {
+                ConsentScope.RESEARCH,
+                ConsentScope.MODEL_TRAINING,
+                ConsentScope.FEDERATED_LEARNING,
+            }
+
+            blocked_scopes: List[str] = []
+
+            if not privacy_settings.get("allow_analytics", True):
+                blocked_scopes.extend(
+                    s.value for s in scopes if s in analytics_scopes
+                )
+            if not privacy_settings.get("allow_personalization", True):
+                blocked_scopes.extend(
+                    s.value for s in scopes if s in personalization_scopes
+                )
+            if not privacy_settings.get("allow_research", False):
+                blocked_scopes.extend(
+                    s.value for s in scopes if s in research_scopes
+                )
+
+            if blocked_scopes:
+                blocked_scopes = sorted(set(blocked_scopes))
+                raise HTTPException(
+                    status_code=403,
+                    detail={
+                        "error": "privacy_flags_denied",
+                        "message": "Requested scopes are disabled by user privacy settings.",
+                        "scopes_checked": [s.value for s in scopes],
+                        "scopes_blocked": blocked_scopes,
+                    },
+                )
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.error(
+                "Privacy settings check failed",
+                user_id=request.user_id,
+                requester_role=request.requester_role,
+                error=str(exc),
+            )
 
     engine = get_consent_engine()
 

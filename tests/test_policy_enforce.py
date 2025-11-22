@@ -96,3 +96,41 @@ def test_policy_enforce_no_scopes_returns_allowed() -> None:
     assert data["allowed"] is True
     assert data["reason"] == "no_scopes_requested"
     assert data["scopes_checked"] == []
+
+
+@pytest.mark.asyncio
+async def test_policy_enforce_respects_privacy_flags(monkeypatch: pytest.MonkeyPatch) -> None:
+    storage = InMemoryConsentStorage()
+    engine = ConsentEngine(storage)
+    engine.grant_consent(
+        user_id="user_123",
+        scope=ConsentScope.ANALYTICS,
+        purpose="Testing",
+        granted_by="admin",
+    )
+
+    monkeypatch.setattr("luki_sec.main.get_consent_engine", lambda: engine)
+
+    class DummyPrivacyControls:
+        async def get_settings(self, user_id: str) -> Dict[str, Any]:
+            return {
+                "user_id": user_id,
+                "allow_analytics": False,
+                "allow_personalization": True,
+                "allow_research": True,
+            }
+
+    monkeypatch.setattr("luki_sec.main.privacy_controls", DummyPrivacyControls())
+
+    payload: Dict[str, Any] = {
+        "user_id": "user_123",
+        "requester_role": "agent",
+        "requested_scopes": [ConsentScope.ANALYTICS.value],
+    }
+
+    response = client.post("/policy/enforce", json=payload)
+
+    assert response.status_code == 403
+    data = response.json()
+    assert data["detail"]["error"] == "privacy_flags_denied"
+    assert ConsentScope.ANALYTICS.value in data["detail"]["scopes_blocked"]
