@@ -350,6 +350,67 @@ async def enforce_policy(request: PolicyEnforcementRequest):
 
     engine = get_consent_engine()
 
+    # Default-allow semantics for core ELR memories:
+    # If only the elr_memories scope is requested and the user has no
+    # explicit consent record for that scope (or no consent bundle at all),
+    # treat this as allowed-by-default so basic ELR storage/retrieval works
+    # for new users. Explicit revocations/expiry still flow through normal
+    # consent enforcement.
+    try:
+        elr_only = {
+            ConsentScope.ELR_MEMORIES,
+        }
+        scope_set = set(scopes)
+        has_only_elr = scope_set and scope_set.issubset(elr_only)
+
+        if has_only_elr:
+            try:
+                consent_bundle = engine.get_user_consents(request.user_id)
+            except Exception as exc:
+                logger.error(
+                    "Consent bundle lookup failed during ELR default-allow check",
+                    user_id=request.user_id,
+                    requester_role=request.requester_role,
+                    error=str(exc),
+                )
+                consent_bundle = None
+
+            missing_bundle = consent_bundle is None
+            missing_elr_consent = False
+            if consent_bundle is not None:
+                try:
+                    elr_consent = consent_bundle.get_consent(ConsentScope.ELR_MEMORIES)
+                    missing_elr_consent = elr_consent is None
+                except Exception as exc:
+                    logger.error(
+                        "Failed to inspect ELR consent record; falling back to default allow",
+                        user_id=request.user_id,
+                        requester_role=request.requester_role,
+                        error=str(exc),
+                    )
+                    missing_elr_consent = True
+
+            if missing_bundle or missing_elr_consent:
+                logger.info(
+                    "Default-allow elr_memories with no explicit consent record",
+                    user_id=request.user_id,
+                    requester_role=request.requester_role,
+                )
+                return {
+                    "allowed": True,
+                    "scopes_checked": [s.value for s in scopes],
+                    "reason": "default_allow_elr_no_consent_record",
+                }
+    except Exception as exc:
+        # On any unexpected failure in the default-allow branch,
+        # fall back to normal consent enforcement.
+        logger.error(
+            "ELR default-allow check failed; falling back to strict enforcement",
+            user_id=request.user_id,
+            requester_role=request.requester_role,
+            error=str(exc),
+        )
+
     try:
         engine.enforce_scope(request.user_id, request.requester_role, scopes)
         return {
