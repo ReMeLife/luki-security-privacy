@@ -350,6 +350,66 @@ async def enforce_policy(request: PolicyEnforcementRequest):
 
     engine = get_consent_engine()
 
+    try:
+        processing_scopes = {
+            ConsentScope.ANALYTICS,
+            ConsentScope.PERSONALIZATION,
+            ConsentScope.DIFFERENTIAL_PRIVACY,
+        }
+        scope_set = set(scopes)
+        has_only_processing = scope_set and scope_set.issubset(processing_scopes)
+
+        if has_only_processing:
+            try:
+                consent_bundle = engine.get_user_consents(request.user_id)
+            except Exception as exc:
+                logger.error(
+                    "Consent bundle lookup failed during processing default-allow check",
+                    user_id=request.user_id,
+                    requester_role=request.requester_role,
+                    error=str(exc),
+                )
+                consent_bundle = None
+
+            missing_bundle = consent_bundle is None
+            missing_all_processing_consents = False
+            if consent_bundle is not None:
+                try:
+                    missing_all_processing_consents = True
+                    for scope in scope_set:
+                        consent = consent_bundle.get_consent(scope)
+                        if consent is not None:
+                            missing_all_processing_consents = False
+                            break
+                except Exception as exc:
+                    logger.error(
+                        "Failed to inspect processing consent records; falling back to strict enforcement",
+                        user_id=request.user_id,
+                        requester_role=request.requester_role,
+                        error=str(exc),
+                    )
+                    missing_all_processing_consents = False
+
+            if missing_bundle or missing_all_processing_consents:
+                logger.info(
+                    "Default-allow processing scopes with no explicit consent record",
+                    user_id=request.user_id,
+                    requester_role=request.requester_role,
+                    scopes=[s.value for s in scopes],
+                )
+                return {
+                    "allowed": True,
+                    "scopes_checked": [s.value for s in scopes],
+                    "reason": "default_allow_processing_no_consent_record",
+                }
+    except Exception as exc:
+        logger.error(
+            "Processing default-allow check failed; falling back to strict enforcement",
+            user_id=request.user_id,
+            requester_role=request.requester_role,
+            error=str(exc),
+        )
+
     # Default-allow semantics for core ELR memories:
     # If only the elr_memories scope is requested and the user has no
     # explicit consent record for that scope (or no consent bundle at all),
