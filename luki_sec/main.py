@@ -824,6 +824,39 @@ async def get_wallet_status(user_id: str):
     return status
 
 
+@app.get("/wallet/session-key/{user_id}")
+async def get_session_key(user_id: str):
+    """
+    Get the active session encryption key for a user.
+    
+    Internal endpoint for service-to-service calls (memory service).
+    Returns the raw encryption key bytes (base64 encoded) if available.
+    
+    NOTE: This endpoint should be protected by service-to-service auth
+    in production. The key is sensitive and should not be exposed to clients.
+    """
+    manager = get_user_key_manager()
+    result = await manager.get_active_session_key(user_id)
+    
+    if not result:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "no_active_session_key",
+                "message": "No active session key for this user. User must re-authenticate with wallet.",
+            }
+        )
+    
+    key_id, key_bytes = result
+    
+    return {
+        "success": True,
+        "key_id": key_id,
+        "key": base64.b64encode(key_bytes).decode("ascii"),
+        "note": "Key is base64-encoded. Decode before use.",
+    }
+
+
 # =============================================================================
 # ROOT ENDPOINT
 # =============================================================================
