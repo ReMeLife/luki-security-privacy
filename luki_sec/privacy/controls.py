@@ -40,6 +40,13 @@ class PrivacySettings(BaseModel):
     allow_analytics: bool = True
     allow_personalization: bool = True
     allow_research: bool = False
+    
+    # Wallet-derived encryption settings
+    encryption_mode: str = "server"  # "server" | "wallet" | "hybrid"
+    wallet_public_key: Optional[str] = None  # Solana public key (base58)
+    wallet_registered_at: Optional[datetime] = None
+    key_derivation_version: Optional[str] = None
+    
     extra: Dict[str, Any] = Field(default_factory=dict)
 
 
@@ -135,6 +142,10 @@ class PrivacyControls:
             "allow_analytics",
             "allow_personalization",
             "allow_research",
+            "encryption_mode",
+            "wallet_public_key",
+            "wallet_registered_at",
+            "key_derivation_version",
         }
 
         extra = data.get("extra") or {}
