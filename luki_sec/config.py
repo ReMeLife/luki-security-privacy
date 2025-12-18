@@ -30,6 +30,22 @@ class FLBackend(str, Enum):
     DISABLED = "disabled"
 
 
+class QuantumMode(str, Enum):
+    """Quantum-safe encryption operational modes"""
+    DISABLED = "disabled"           # No PQC features active
+    GROUNDWORK = "groundwork"       # Infrastructure ready, monitoring only
+    HYBRID_OPTIONAL = "hybrid_opt"  # Hybrid encryption available for opt-in
+    HYBRID_DEFAULT = "hybrid_def"   # Hybrid encryption by default
+    FULL_PQC = "full_pqc"          # Full post-quantum (future)
+
+
+class QuantumSecurityLevel(str, Enum):
+    """NIST security levels for post-quantum cryptography"""
+    KYBER_512 = "kyber512"    # NIST Level 1 (~AES-128)
+    KYBER_768 = "kyber768"    # NIST Level 3 (~AES-192)
+    KYBER_1024 = "kyber1024"  # NIST Level 5 (~AES-256) - Recommended
+
+
 class SecurityConfig(BaseSettings):
     """Security and privacy configuration settings"""
     
@@ -61,6 +77,24 @@ class SecurityConfig(BaseSettings):
     anomaly_detection_enabled: bool = Field(default=True)
     anomaly_threshold: float = Field(default=0.1)
     anomaly_retrain_days: int = Field(default=30)
+    
+    # Quantum-Safe Cryptography settings
+    quantum_mode: QuantumMode = Field(
+        default=QuantumMode.GROUNDWORK,
+        description="Quantum-safe encryption operational mode"
+    )
+    quantum_security_level: QuantumSecurityLevel = Field(
+        default=QuantumSecurityLevel.KYBER_1024,
+        description="NIST security level for Kyber (kyber512, kyber768, kyber1024)"
+    )
+    quantum_hybrid_enabled: bool = Field(
+        default=True,
+        description="Enable hybrid classical+quantum key encapsulation"
+    )
+    quantum_status_public: bool = Field(
+        default=True,
+        description="Make quantum status endpoints publicly accessible"
+    )
     
     # Environment-specific overrides
     debug_mode: bool = Field(default=False)
