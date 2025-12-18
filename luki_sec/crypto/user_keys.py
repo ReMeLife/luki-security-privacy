@@ -503,6 +503,18 @@ class UserKeyManager:
             "key_derivation_version": registration.key_derivation_version,
             "has_active_session_key": active_key is not None,
         }
+    
+    async def get_active_session_key(self, user_id: str) -> Optional[Tuple[str, bytes]]:
+        """
+        Get the active session encryption key for a user.
+        
+        Used by other services (e.g., memory service) to fetch the current
+        encryption key for a user with wallet-derived encryption.
+        
+        Returns:
+            Tuple of (key_id, key_bytes) or None if no active session key
+        """
+        return await self.session_keys.get_user_active_key(user_id)
 
 
 # Global instance
