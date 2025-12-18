@@ -40,6 +40,14 @@ from .crypto.quantum_safe import (
     get_hybrid_kem,
     check_quantum_backend,
 )
+from .crypto.wallet_keys import (
+    get_wallet_key_derivation,
+    KEY_DERIVATION_VERSION,
+)
+from .crypto.user_keys import (
+    get_user_key_manager,
+    EncryptionMode,
+)
 
 # Configure structured logging
 structlog.configure(
@@ -699,6 +707,124 @@ async def quantum_demo_hybrid():
 
 
 # =============================================================================
+# WALLET-DERIVED ENCRYPTION ENDPOINTS
+# =============================================================================
+
+class WalletRegistrationRequest(BaseModel):
+    """Request body for wallet registration"""
+    user_id: str
+    wallet_public_key: str = Field(..., description="Solana public key (base58)")
+    signature: str = Field(..., description="Signature of key derivation message (base64)")
+
+
+class WalletDeriveKeyRequest(BaseModel):
+    """Request body for deriving session key"""
+    user_id: str
+    wallet_public_key: str
+    signature: str
+
+
+@app.get("/wallet/challenge/{user_id}")
+async def get_wallet_challenge(user_id: str):
+    """
+    Get the challenge message that user must sign for wallet registration.
+    
+    The user signs this message with their Solana wallet to prove ownership
+    and enable wallet-derived encryption.
+    """
+    derivation = get_wallet_key_derivation()
+    challenge = derivation.create_registration_challenge(user_id)
+    
+    return {
+        "challenge": challenge,
+        "instructions": "Sign the 'message' field with your Solana wallet",
+    }
+
+
+@app.post("/wallet/register")
+async def register_wallet(request: WalletRegistrationRequest):
+    """
+    Register a Solana wallet for encryption key derivation.
+    
+    After registration, the user's ELR memories will be encrypted with
+    a key derived from their wallet signature - only they can decrypt.
+    """
+    manager = get_user_key_manager()
+    
+    result = await manager.register_wallet(
+        user_id=request.user_id,
+        wallet_public_key=request.wallet_public_key,
+        signature_base64=request.signature,
+    )
+    
+    if not result.get("success"):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": result.get("error", "registration_failed"),
+                "message": result.get("message", "Wallet registration failed"),
+            }
+        )
+    
+    # Update privacy settings with wallet info
+    if privacy_controls:
+        await privacy_controls.update_settings(request.user_id, {
+            "encryption_mode": "wallet",
+            "wallet_public_key": request.wallet_public_key,
+            "wallet_registered_at": result.get("registered_at"),
+            "key_derivation_version": result.get("key_derivation_version"),
+        })
+    
+    logger.info("Wallet registered for encryption",
+               user_id=request.user_id,
+               wallet=request.wallet_public_key[:8] + "...")
+    
+    return result
+
+
+@app.post("/wallet/derive-key")
+async def derive_session_key(request: WalletDeriveKeyRequest):
+    """
+    Derive a new session encryption key from wallet signature.
+    
+    Called when user needs to access their encrypted data.
+    The derived key is cached in memory for the session duration.
+    """
+    manager = get_user_key_manager()
+    
+    result = await manager.derive_session_key(
+        user_id=request.user_id,
+        wallet_public_key=request.wallet_public_key,
+        signature_base64=request.signature,
+    )
+    
+    if not result.get("success"):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": result.get("error", "derivation_failed"),
+                "message": result.get("message", "Key derivation failed"),
+            }
+        )
+    
+    return result
+
+
+@app.get("/wallet/status/{user_id}")
+async def get_wallet_status(user_id: str):
+    """
+    Get wallet encryption status for a user.
+    
+    Returns whether wallet encryption is enabled, registered wallet info,
+    and whether there's an active session key.
+    """
+    manager = get_user_key_manager()
+    status = await manager.get_wallet_status(user_id)
+    
+    return status
+
+
+# =============================================================================
 # ROOT ENDPOINT
 # =============================================================================
 
@@ -714,6 +840,7 @@ async def root():
             "privacy_controls": True,
             "encryption": True,
             "quantum_ready": True,
+            "wallet_encryption": True,
         }
     }
 
