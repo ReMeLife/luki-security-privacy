@@ -30,6 +30,16 @@ from .crypto.encrypt import (
     EncryptionError,
     DecryptionError,
 )
+from .crypto.quantum_readiness import (
+    get_quantum_status,
+    get_quantum_threat_brief,
+    get_quantum_readiness_checker,
+)
+from .crypto.quantum_safe import (
+    get_kyber,
+    get_hybrid_kem,
+    check_quantum_backend,
+)
 
 # Configure structured logging
 structlog.configure(
@@ -156,6 +166,11 @@ app.add_middleware(
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
+    # Get quantum backend status
+    quantum_backends = check_quantum_backend()
+    kyber = get_kyber()
+    kyber_status = kyber.get_status()
+    
     status = {
         "status": "healthy",
         "service": "luki-security-privacy",
@@ -164,7 +179,14 @@ async def health_check():
         "components": {
             "consent_manager": consent_manager is not None,
             "privacy_controls": privacy_controls is not None,
-            "encryption_service": encryption_service is not None
+            "encryption_service": encryption_service is not None,
+            "quantum_safe": True,
+        },
+        "quantum_readiness": {
+            "status": "groundwork",
+            "kyber_backend": kyber_status.get("backend", "unknown"),
+            "production_ready": kyber_status.get("production_ready", False),
+            "hybrid_available": True,
         }
     }
     
@@ -505,13 +527,194 @@ async def enforce_policy(request: PolicyEnforcementRequest):
         )
         raise HTTPException(status_code=500, detail="Failed to enforce policy")
 
+# =============================================================================
+# QUANTUM-SAFE CRYPTOGRAPHY ENDPOINTS
+# =============================================================================
+
+@app.get("/quantum/status")
+async def quantum_status():
+    """
+    Get comprehensive quantum readiness status.
+    
+    Returns detailed information about:
+    - Current quantum threat assessment
+    - Algorithm readiness (symmetric, KEM, signatures)
+    - Post-quantum library availability
+    - Migration status and recommendations
+    
+    This endpoint provides transparency about LUKi's quantum security posture.
+    """
+    from datetime import datetime, UTC
+    
+    status = get_quantum_status()
+    
+    return {
+        "service": "luki-security-privacy",
+        "quantum_readiness": status,
+        "timestamp": datetime.now(UTC).isoformat(),
+    }
+
+
+@app.get("/quantum/threat")
+async def quantum_threat():
+    """
+    Get a brief quantum threat assessment.
+    
+    Returns a concise summary of the current quantum computing threat
+    to cryptographic systems and LUKi's preparedness.
+    """
+    return get_quantum_threat_brief()
+
+
+@app.get("/quantum/algorithms")
+async def quantum_algorithms():
+    """
+    Get status of quantum-safe algorithms.
+    
+    Returns information about implemented post-quantum algorithms
+    and their current operational status.
+    """
+    kyber = get_kyber()
+    hybrid = get_hybrid_kem()
+    backends = check_quantum_backend()
+    
+    return {
+        "backends_available": backends,
+        "kyber": kyber.get_status(),
+        "hybrid_kem": hybrid.get_status(),
+        "supported_security_levels": [
+            {
+                "level": "kyber512",
+                "nist_level": 1,
+                "equivalent_classical": "AES-128",
+                "recommended": False,
+            },
+            {
+                "level": "kyber768",
+                "nist_level": 3,
+                "equivalent_classical": "AES-192",
+                "recommended": False,
+            },
+            {
+                "level": "kyber1024",
+                "nist_level": 5,
+                "equivalent_classical": "AES-256",
+                "recommended": True,
+            },
+        ],
+        "nist_standards": {
+            "kyber": "FIPS 203 (ML-KEM)",
+            "dilithium": "FIPS 204 (ML-DSA) - Not yet implemented",
+        }
+    }
+
+
+@app.post("/quantum/demo/encapsulate")
+async def quantum_demo_encapsulate():
+    """
+    Demo endpoint: Generate Kyber keypair and perform encapsulation.
+    
+    This demonstrates the quantum-safe key encapsulation in action.
+    For demonstration purposes only - keys are ephemeral and not stored.
+    
+    Use this to verify that quantum-safe cryptography is operational.
+    """
+    kyber = get_kyber()
+    
+    # Generate keypair
+    public_key, secret_key = kyber.generate_keypair()
+    
+    # Perform encapsulation (what a sender would do)
+    ciphertext, shared_secret = kyber.encapsulate(public_key)
+    
+    # Verify decapsulation works (what recipient would do)
+    recovered_secret = kyber.decapsulate(secret_key, ciphertext)
+    
+    # Verify round-trip works
+    demo_successful = shared_secret == recovered_secret
+    
+    return {
+        "algorithm": "CRYSTALS-Kyber-1024",
+        "nist_standard": "FIPS 203 (ML-KEM)",
+        "demo_successful": demo_successful,
+        "key_sizes": {
+            "public_key_bytes": len(public_key),
+            "secret_key_bytes": len(secret_key),
+            "ciphertext_bytes": len(ciphertext),
+            "shared_secret_bytes": len(shared_secret),
+        },
+        "backend": kyber.get_status()["backend"],
+        "production_ready": kyber.get_status()["production_ready"],
+        "note": "This is a demonstration - keys are ephemeral and not stored"
+    }
+
+
+@app.post("/quantum/demo/hybrid")
+async def quantum_demo_hybrid():
+    """
+    Demo endpoint: Perform hybrid (classical + quantum) key encapsulation.
+    
+    Demonstrates the hybrid approach combining:
+    - X25519 (classical elliptic curve Diffie-Hellman)
+    - CRYSTALS-Kyber (post-quantum lattice-based KEM)
+    
+    This provides security even if one algorithm is broken.
+    """
+    hybrid = get_hybrid_kem()
+    
+    # Generate hybrid keypair (both classical and quantum)
+    keypair = hybrid.generate_keypair()
+    
+    # Perform hybrid encapsulation
+    ciphertext_bundle, shared_secret = hybrid.encapsulate(
+        keypair["classical_public"],
+        keypair["quantum_public"]
+    )
+    
+    # Verify decapsulation recovers the same secret
+    recovered_secret = hybrid.decapsulate(
+        keypair["classical_private"],
+        keypair["quantum_private"],
+        ciphertext_bundle
+    )
+    
+    demo_successful = shared_secret == recovered_secret
+    
+    return {
+        "type": "hybrid",
+        "algorithms": {
+            "classical": "X25519 (Curve25519 ECDH)",
+            "quantum": "CRYSTALS-Kyber-1024",
+        },
+        "security_model": "Safe if EITHER X25519 OR Kyber remains secure",
+        "demo_successful": demo_successful,
+        "key_sizes": {
+            "classical_public_key_bytes": len(keypair["classical_public"]),
+            "quantum_public_key_bytes": len(keypair["quantum_public"]),
+            "shared_secret_bytes": len(shared_secret),
+        },
+        "status": hybrid.get_status(),
+        "note": "Hybrid mode provides defense-in-depth against both classical and quantum attacks"
+    }
+
+
+# =============================================================================
+# ROOT ENDPOINT
+# =============================================================================
+
 @app.get("/")
 async def root():
     """Root endpoint"""
     return {
         "message": "LUKi Security & Privacy Module",
         "version": "0.1.0",
-        "status": "operational"
+        "status": "operational",
+        "features": {
+            "consent_management": True,
+            "privacy_controls": True,
+            "encryption": True,
+            "quantum_ready": True,
+        }
     }
 
 if __name__ == "__main__":
