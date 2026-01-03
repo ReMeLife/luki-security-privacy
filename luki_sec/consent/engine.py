@@ -35,6 +35,7 @@ class ConsentEngine:
     def __init__(self, storage: Optional[ConsentStorage] = None):
         self.storage = storage or ConsentStorage()
         self.config = get_security_config()
+        self.expiry_warning_days = 30  # Warn 30 days before expiry
     
     def check_consent(self, user_id: str, scope: ConsentScope) -> bool:
         """Check if user has valid consent for scope"""
@@ -48,6 +49,49 @@ class ConsentEngine:
         except Exception as e:
             logger.error("Error checking consent", user_id=user_id, scope=scope, error=str(e))
             return False
+    
+    def check_consent_expiring_soon(self, user_id: str, scope: ConsentScope) -> bool:
+        """
+        Check if consent is expiring soon.
+        
+        Args:
+            user_id: User ID
+            scope: Consent scope
+        
+        Returns:
+            True if consent expires within warning period
+        """
+        try:
+            consent_bundle = self.storage.get_user_consents(user_id)
+            if not consent_bundle:
+                return False
+            
+            consent = consent_bundle.get_consent(scope)
+            if not consent or not consent.expires_at:
+                return False
+            
+            days_until_expiry = (consent.expires_at - datetime.now(UTC)).days
+            return 0 < days_until_expiry <= self.expiry_warning_days
+            
+        except Exception as e:
+            logger.error("Error checking consent expiry", user_id=user_id, scope=scope, error=str(e))
+            return False
+    
+    def check_multiple_consents(self, user_id: str, scopes: List[ConsentScope]) -> Dict[ConsentScope, bool]:
+        """
+        Check multiple consent scopes at once.
+        
+        Args:
+            user_id: User ID
+            scopes: List of consent scopes to check
+        
+        Returns:
+            Dictionary mapping scopes to their consent status
+        """
+        results = {}
+        for scope in scopes:
+            results[scope] = self.check_consent(user_id, scope)
+        return results
     
     def enforce_scope(self, user_id: str, requester_role: str, 
                      requested_scopes: List[ConsentScope]) -> None:
