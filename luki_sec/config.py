@@ -104,18 +104,48 @@ class SecurityConfig(BaseSettings):
 
 
 # Global configuration instance
-security_config = SecurityConfig()
+_config = SecurityConfig()
 
 
 def get_security_config() -> SecurityConfig:
-    """Get the global security configuration instance"""
-    return security_config
+    """Get the global security configuration"""
+    return _config
 
 
-def update_security_config(**kwargs) -> SecurityConfig:
-    """Update security configuration with new values"""
-    global security_config
-    for key, value in kwargs.items():
-        if hasattr(security_config, key):
-            setattr(security_config, key, value)
-    return security_config
+def update_security_config(new_config: SecurityConfig) -> None:
+    """Update the global security configuration"""
+    global _config
+    _config = new_config
+
+
+def validate_crypto_settings() -> list[str]:
+    """
+    Validate cryptographic settings.
+    
+    Returns:
+        List of validation warnings
+    """
+    warnings = []
+    config = get_security_config()
+    
+    if config.encryption_key_size not in [128, 192, 256]:
+        warnings.append(f"Invalid encryption key size: {config.encryption_key_size}")
+    
+    if config.dp_epsilon <= 0:
+        warnings.append(f"DP epsilon must be positive: {config.dp_epsilon}")
+    
+    if config.dp_delta < 0 or config.dp_delta >= 1:
+        warnings.append(f"DP delta must be between 0 and 1: {config.dp_delta}")
+    
+    return warnings
+
+
+def is_quantum_safe_enabled() -> bool:
+    """Check if quantum-safe cryptography is enabled."""
+    config = get_security_config()
+    return config.quantum_mode != QuantumMode.DISABLED
+
+
+def get_recommended_security_level() -> QuantumSecurityLevel:
+    """Get recommended quantum security level."""
+    return QuantumSecurityLevel.KYBER_1024
