@@ -30,6 +30,7 @@ from .crypto.encrypt import (
     EncryptionError,
     DecryptionError,
 )
+from .api import insights
 
 # Configure structured logging
 structlog.configure(
@@ -152,6 +153,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include API routers
+app.include_router(insights.router)
 
 @app.get("/health")
 async def health_check():
