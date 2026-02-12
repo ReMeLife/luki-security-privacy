@@ -31,6 +31,8 @@ from .crypto.encrypt import (
     DecryptionError,
 )
 from .api import insights
+from .middleware import correlation_middleware, request_logging_middleware
+from .operational_metrics import operational_metrics
 
 # Configure structured logging
 structlog.configure(
@@ -154,25 +156,58 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Register request middleware (reverse order: last registered = runs first).
+app.middleware("http")(request_logging_middleware)
+app.middleware("http")(correlation_middleware)
+
 # Include API routers
 app.include_router(insights.router)
 
 @app.get("/health")
-async def health_check():
-    """Health check endpoint"""
-    status = {
-        "status": "healthy",
+async def health_check(deep: bool = False):
+    """Health check endpoint.
+
+    With ``?deep=true``, performs functional verification of core
+    components (encryption round-trip, consent engine availability)
+    rather than just null-checks.
+    """
+    components = {
+        "consent_manager": "ready" if consent_manager is not None else "unavailable",
+        "privacy_controls": "ready" if privacy_controls is not None else "unavailable",
+        "encryption_service": "ready" if encryption_service is not None else "unavailable",
+    }
+
+    if deep:
+        # Verify encryption service can round-trip a test payload.
+        if encryption_service is not None:
+            try:
+                test_data = {"_health": "check"}
+                encrypted = await encryption_service.encrypt(test_data)
+                decrypted = await encryption_service.decrypt(encrypted)
+                components["encryption_service"] = (
+                    "healthy" if decrypted == test_data else "degraded"
+                )
+            except Exception as exc:
+                components["encryption_service"] = f"error: {type(exc).__name__}"
+
+        # Verify consent engine is accessible.
+        try:
+            engine = get_consent_engine()
+            components["consent_engine"] = "healthy" if engine else "unavailable"
+        except Exception as exc:
+            components["consent_engine"] = f"error: {type(exc).__name__}"
+
+    all_ok = all(
+        v in ("ready", "healthy")
+        for v in components.values()
+    )
+
+    return {
+        "status": "healthy" if all_ok else "degraded",
         "service": "luki-security-privacy",
         "version": "0.1.0",
-        "environment": "production",
-        "components": {
-            "consent_manager": consent_manager is not None,
-            "privacy_controls": privacy_controls is not None,
-            "encryption_service": encryption_service is not None
-        }
+        "components": components,
     }
-    
-    return status
 
 
 @app.get("/security/config", response_model=SecurityConfigOut)
@@ -257,11 +292,15 @@ async def encrypt_data(data: dict):
     """Encrypt sensitive data"""
     if not encryption_service:
         raise HTTPException(status_code=503, detail="Encryption service not available")
-    
+
+    import time as _time
+    _start = _time.monotonic()
     try:
         encrypted = await encryption_service.encrypt(data)
+        operational_metrics.record_call("encrypt", _time.monotonic() - _start, success=True)
         return {"encrypted_data": encrypted}
     except Exception as e:
+        operational_metrics.record_call("encrypt", _time.monotonic() - _start, success=False)
         logger.error("Failed to encrypt data", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -270,11 +309,15 @@ async def decrypt_data(encrypted_data: str):
     """Decrypt sensitive data"""
     if not encryption_service:
         raise HTTPException(status_code=503, detail="Encryption service not available")
-    
+
+    import time as _time
+    _start = _time.monotonic()
     try:
         decrypted = await encryption_service.decrypt(encrypted_data)
+        operational_metrics.record_call("decrypt", _time.monotonic() - _start, success=True)
         return {"decrypted_data": decrypted}
     except Exception as e:
+        operational_metrics.record_call("decrypt", _time.monotonic() - _start, success=False)
         logger.error("Failed to decrypt data", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -477,12 +520,14 @@ async def enforce_policy(request: PolicyEnforcementRequest):
 
     try:
         engine.enforce_scope(request.user_id, request.requester_role, scopes)
+        operational_metrics.record_policy_decision(allowed=True)
         return {
             "allowed": True,
             "scopes_checked": [s.value for s in scopes],
             "reason": "consent_valid",
         }
     except ConsentExpiredError as exc:
+        operational_metrics.record_policy_decision(allowed=False)
         raise HTTPException(
             status_code=403,
             detail={
@@ -492,6 +537,7 @@ async def enforce_policy(request: PolicyEnforcementRequest):
             },
         )
     except ConsentDeniedError as exc:
+        operational_metrics.record_policy_decision(allowed=False)
         raise HTTPException(
             status_code=403,
             detail={
@@ -508,6 +554,16 @@ async def enforce_policy(request: PolicyEnforcementRequest):
             error=str(exc),
         )
         raise HTTPException(status_code=500, detail="Failed to enforce policy")
+
+@app.get("/metrics")
+async def get_metrics():
+    """Operational metrics for consent, encryption, and policy enforcement.
+
+    Returns counters, latency histograms, and policy allow/deny ratios
+    collected by the :mod:`operational_metrics` module.
+    """
+    return operational_metrics.get_metrics()
+
 
 @app.get("/")
 async def root():
