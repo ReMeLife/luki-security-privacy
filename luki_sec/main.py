@@ -30,6 +30,11 @@ from .crypto.encrypt import (
     EncryptionError,
     DecryptionError,
 )
+from .api import insights
+from .middleware import correlation_middleware, request_logging_middleware
+from .operational_metrics import operational_metrics
+from .policy.audit import get_audit_logger, AuditEventType
+from .policy.decision_cache import get_decision_cache
 
 # Configure structured logging
 structlog.configure(
@@ -153,22 +158,58 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Register request middleware (reverse order: last registered = runs first).
+app.middleware("http")(request_logging_middleware)
+app.middleware("http")(correlation_middleware)
+
+# Include API routers
+app.include_router(insights.router)
+
 @app.get("/health")
-async def health_check():
-    """Health check endpoint"""
-    status = {
-        "status": "healthy",
+async def health_check(deep: bool = False):
+    """Health check endpoint.
+
+    With ``?deep=true``, performs functional verification of core
+    components (encryption round-trip, consent engine availability)
+    rather than just null-checks.
+    """
+    components = {
+        "consent_manager": "ready" if consent_manager is not None else "unavailable",
+        "privacy_controls": "ready" if privacy_controls is not None else "unavailable",
+        "encryption_service": "ready" if encryption_service is not None else "unavailable",
+    }
+
+    if deep:
+        # Verify encryption service can round-trip a test payload.
+        if encryption_service is not None:
+            try:
+                test_data = {"_health": "check"}
+                encrypted = await encryption_service.encrypt(test_data)
+                decrypted = await encryption_service.decrypt(encrypted)
+                components["encryption_service"] = (
+                    "healthy" if decrypted == test_data else "degraded"
+                )
+            except Exception as exc:
+                components["encryption_service"] = f"error: {type(exc).__name__}"
+
+        # Verify consent engine is accessible.
+        try:
+            engine = get_consent_engine()
+            components["consent_engine"] = "healthy" if engine else "unavailable"
+        except Exception as exc:
+            components["consent_engine"] = f"error: {type(exc).__name__}"
+
+    all_ok = all(
+        v in ("ready", "healthy")
+        for v in components.values()
+    )
+
+    return {
+        "status": "healthy" if all_ok else "degraded",
         "service": "luki-security-privacy",
         "version": "0.1.0",
-        "environment": "production",
-        "components": {
-            "consent_manager": consent_manager is not None,
-            "privacy_controls": privacy_controls is not None,
-            "encryption_service": encryption_service is not None
-        }
+        "components": components,
     }
-    
-    return status
 
 
 @app.get("/security/config", response_model=SecurityConfigOut)
@@ -199,9 +240,12 @@ async def update_consent(user_id: str, consent_data: dict):
     """Update user consent preferences"""
     if not consent_manager:
         raise HTTPException(status_code=503, detail="Consent manager not available")
-    
+
     try:
         result = await consent_manager.update_consent(user_id, consent_data)
+        # Invalidate cached policy decisions so the new consent takes
+        # effect immediately instead of waiting for TTL expiry.
+        get_decision_cache().invalidate_user(user_id)
         logger.info("Consent updated", user_id=user_id)
         return {"status": "success", "consent": result}
     except Exception as e:
@@ -226,9 +270,12 @@ async def update_privacy_settings(user_id: str, privacy_settings: dict):
     """Update user privacy settings"""
     if not privacy_controls:
         raise HTTPException(status_code=503, detail="Privacy controls not available")
-    
+
     try:
         result = await privacy_controls.update_settings(user_id, privacy_settings)
+        # Invalidate cached policy decisions – privacy flags affect
+        # which scopes are allowed.
+        get_decision_cache().invalidate_user(user_id)
         logger.info("Privacy settings updated", user_id=user_id)
         return {"status": "success", "settings": result}
     except Exception as e:
@@ -253,11 +300,15 @@ async def encrypt_data(data: dict):
     """Encrypt sensitive data"""
     if not encryption_service:
         raise HTTPException(status_code=503, detail="Encryption service not available")
-    
+
+    import time as _time
+    _start = _time.monotonic()
     try:
         encrypted = await encryption_service.encrypt(data)
+        operational_metrics.record_call("encrypt", _time.monotonic() - _start, success=True)
         return {"encrypted_data": encrypted}
     except Exception as e:
+        operational_metrics.record_call("encrypt", _time.monotonic() - _start, success=False)
         logger.error("Failed to encrypt data", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -266,11 +317,15 @@ async def decrypt_data(encrypted_data: str):
     """Decrypt sensitive data"""
     if not encryption_service:
         raise HTTPException(status_code=503, detail="Encryption service not available")
-    
+
+    import time as _time
+    _start = _time.monotonic()
     try:
         decrypted = await encryption_service.decrypt(encrypted_data)
+        operational_metrics.record_call("decrypt", _time.monotonic() - _start, success=True)
         return {"decrypted_data": decrypted}
     except Exception as e:
+        operational_metrics.record_call("decrypt", _time.monotonic() - _start, success=False)
         logger.error("Failed to decrypt data", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -298,6 +353,14 @@ async def enforce_policy(request: PolicyEnforcementRequest):
             status_code=400,
             detail={"error": "invalid_scopes", "scopes": invalid_scopes},
         )
+
+    # Check the decision cache for a recent ALLOW for this exact
+    # user + scopes + role combination (short TTL, ~60 s).
+    _dcache = get_decision_cache()
+    _scope_key = frozenset(s.value for s in scopes)
+    cached_decision = _dcache.get(request.user_id, _scope_key, request.requester_role)
+    if cached_decision is not None:
+        return cached_decision
     if privacy_controls is not None:
         try:
             privacy_settings = await privacy_controls.get_settings(request.user_id)
@@ -351,13 +414,166 @@ async def enforce_policy(request: PolicyEnforcementRequest):
     engine = get_consent_engine()
 
     try:
+        processing_scopes = {
+            ConsentScope.ANALYTICS,
+            ConsentScope.PERSONALIZATION,
+            ConsentScope.DIFFERENTIAL_PRIVACY,
+        }
+        scope_set = set(scopes)
+        has_only_processing = scope_set and scope_set.issubset(processing_scopes)
+
+        if has_only_processing:
+            try:
+                consent_bundle = engine.get_user_consents(request.user_id)
+            except Exception as exc:
+                logger.error(
+                    "Consent bundle lookup failed during processing default-allow check",
+                    user_id=request.user_id,
+                    requester_role=request.requester_role,
+                    error=str(exc),
+                )
+                consent_bundle = None
+
+            missing_bundle = consent_bundle is None
+            missing_all_processing_consents = False
+            if consent_bundle is not None:
+                try:
+                    missing_all_processing_consents = True
+                    for scope in scope_set:
+                        consent = consent_bundle.get_consent(scope)
+                        if consent is not None:
+                            missing_all_processing_consents = False
+                            break
+                except Exception as exc:
+                    logger.error(
+                        "Failed to inspect processing consent records; falling back to strict enforcement",
+                        user_id=request.user_id,
+                        requester_role=request.requester_role,
+                        error=str(exc),
+                    )
+                    missing_all_processing_consents = False
+
+            if missing_bundle or missing_all_processing_consents:
+                logger.info(
+                    "Default-allow processing scopes with no explicit consent record",
+                    user_id=request.user_id,
+                    requester_role=request.requester_role,
+                    scopes=[s.value for s in scopes],
+                )
+                _result = {
+                    "allowed": True,
+                    "scopes_checked": [s.value for s in scopes],
+                    "reason": "default_allow_processing_no_consent_record",
+                }
+                _dcache.put(request.user_id, _scope_key, request.requester_role, _result)
+                return _result
+    except Exception as exc:
+        logger.error(
+            "Processing default-allow check failed; falling back to strict enforcement",
+            user_id=request.user_id,
+            requester_role=request.requester_role,
+            error=str(exc),
+        )
+
+    # Default-allow semantics for core ELR memories:
+    # If only the elr_memories scope is requested and the user has no
+    # explicit consent record for that scope (or no consent bundle at all),
+    # treat this as allowed-by-default so basic ELR storage/retrieval works
+    # for new users. Explicit revocations/expiry still flow through normal
+    # consent enforcement.
+    try:
+        elr_only = {
+            ConsentScope.ELR_MEMORIES,
+        }
+        scope_set = set(scopes)
+        has_only_elr = scope_set and scope_set.issubset(elr_only)
+
+        if has_only_elr:
+            try:
+                consent_bundle = engine.get_user_consents(request.user_id)
+            except Exception as exc:
+                logger.error(
+                    "Consent bundle lookup failed during ELR default-allow check",
+                    user_id=request.user_id,
+                    requester_role=request.requester_role,
+                    error=str(exc),
+                )
+                consent_bundle = None
+
+            missing_bundle = consent_bundle is None
+            missing_elr_consent = False
+            if consent_bundle is not None:
+                try:
+                    elr_consent = consent_bundle.get_consent(ConsentScope.ELR_MEMORIES)
+                    missing_elr_consent = elr_consent is None
+                except Exception as exc:
+                    logger.error(
+                        "Failed to inspect ELR consent record; falling back to default allow",
+                        user_id=request.user_id,
+                        requester_role=request.requester_role,
+                        error=str(exc),
+                    )
+                    missing_elr_consent = True
+
+            if missing_bundle or missing_elr_consent:
+                logger.info(
+                    "Default-allow elr_memories with no explicit consent record",
+                    user_id=request.user_id,
+                    requester_role=request.requester_role,
+                )
+                _result = {
+                    "allowed": True,
+                    "scopes_checked": [s.value for s in scopes],
+                    "reason": "default_allow_elr_no_consent_record",
+                }
+                _dcache.put(request.user_id, _scope_key, request.requester_role, _result)
+                return _result
+    except Exception as exc:
+        # On any unexpected failure in the default-allow branch,
+        # fall back to normal consent enforcement.
+        logger.error(
+            "ELR default-allow check failed; falling back to strict enforcement",
+            user_id=request.user_id,
+            requester_role=request.requester_role,
+            error=str(exc),
+        )
+
+    audit = get_audit_logger()
+
+    try:
         engine.enforce_scope(request.user_id, request.requester_role, scopes)
-        return {
+        operational_metrics.record_policy_decision(allowed=True)
+
+        # Record successful policy check in audit trail
+        audit.log_event(
+            event_type=AuditEventType.CONSENT_CHECK,
+            action="enforce_policy",
+            outcome="success",
+            user_id=request.user_id,
+            role=request.requester_role,
+            details={
+                "scopes": [s.value for s in scopes],
+                "context": request.context or {},
+            },
+        )
+
+        _result = {
             "allowed": True,
             "scopes_checked": [s.value for s in scopes],
             "reason": "consent_valid",
         }
+        _dcache.put(request.user_id, _scope_key, request.requester_role, _result)
+        return _result
     except ConsentExpiredError as exc:
+        operational_metrics.record_policy_decision(allowed=False)
+        audit.log_event(
+            event_type=AuditEventType.CONSENT_CHECK,
+            action="enforce_policy",
+            outcome="denied",
+            user_id=request.user_id,
+            role=request.requester_role,
+            details={"reason": "consent_expired", "scopes": [s.value for s in scopes]},
+        )
         raise HTTPException(
             status_code=403,
             detail={
@@ -367,6 +583,15 @@ async def enforce_policy(request: PolicyEnforcementRequest):
             },
         )
     except ConsentDeniedError as exc:
+        operational_metrics.record_policy_decision(allowed=False)
+        audit.log_event(
+            event_type=AuditEventType.CONSENT_CHECK,
+            action="enforce_policy",
+            outcome="denied",
+            user_id=request.user_id,
+            role=request.requester_role,
+            details={"reason": "consent_denied", "scopes": [s.value for s in scopes]},
+        )
         raise HTTPException(
             status_code=403,
             detail={
@@ -383,6 +608,18 @@ async def enforce_policy(request: PolicyEnforcementRequest):
             error=str(exc),
         )
         raise HTTPException(status_code=500, detail="Failed to enforce policy")
+
+@app.get("/metrics")
+async def get_metrics():
+    """Operational metrics for consent, encryption, and policy enforcement.
+
+    Returns counters, latency histograms, policy allow/deny ratios,
+    and policy decision cache statistics.
+    """
+    metrics = operational_metrics.get_metrics()
+    metrics["policy_decision_cache"] = get_decision_cache().get_stats()
+    return metrics
+
 
 @app.get("/")
 async def root():

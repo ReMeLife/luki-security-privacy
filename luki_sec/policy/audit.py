@@ -112,11 +112,95 @@ class AuditEvent(BaseModel):
         return secure_hash(combined.encode('utf-8'))
 
 
+class _PersistentStorageAdapter:
+    """Bridges :class:`PersistentAuditLogger` into the ``AuditLogger`` storage
+    interface expected by this module.
+
+    ``AuditLogger`` calls ``store_event(event)`` and
+    ``get_events(...) -> List[AuditEvent]``.  The persistent logger stores
+    raw dicts via ``log_dict(...)`` and queries return plain dicts.  This
+    adapter translates between the two representations so the hash-chain
+    audit logger writes to durable, rotation-capable JSONL files.
+    """
+
+    def __init__(self) -> None:
+        from ..audit.persistent_storage import get_audit_logger as _get_persistent
+        self._persistent = _get_persistent()
+
+    def store_event(self, event: "AuditEvent") -> bool:
+        self._persistent.log_dict(
+            event_type=event.event_type.value if hasattr(event.event_type, "value") else str(event.event_type),
+            action=event.action,
+            outcome=event.outcome,
+            user_id=event.user_id,
+            resource=f"{event.resource_type}:{event.resource_id}" if event.resource_type else None,
+            ip_address=event.ip_address,
+            user_agent=event.user_agent,
+            details={**event.details, "hash": event.hash, "previous_hash": event.previous_hash},
+            correlation_id=event.session_id,
+        )
+        return True
+
+    def get_events(
+        self,
+        user_id: Optional[str] = None,
+        event_type: Optional["AuditEventType"] = None,
+        start_time: Optional[datetime] = None,
+        end_time: Optional[datetime] = None,
+        limit: int = 100,
+    ) -> List["AuditEvent"]:
+        raw_type = event_type.value if event_type and hasattr(event_type, "value") else (str(event_type) if event_type else None)
+        entries = self._persistent.query_logs(
+            start_date=start_time,
+            end_date=end_time,
+            user_id=user_id,
+            event_type=raw_type,
+            limit=limit,
+        )
+        # Best-effort conversion back to AuditEvent for callers that
+        # need the typed representation.  Fields that were not stored
+        # (e.g. hash) are left as None.
+        events: List["AuditEvent"] = []
+        for raw in entries:
+            try:
+                events.append(AuditEvent(
+                    id=raw.get("correlation_id") or "unknown",
+                    event_type=AuditEventType(raw["event_type"]),
+                    timestamp=datetime.fromisoformat(raw["timestamp"]) if raw.get("timestamp") else datetime.now(UTC),
+                    user_id=raw.get("user_id"),
+                    action=raw.get("action", ""),
+                    outcome=raw.get("outcome", ""),
+                    ip_address=raw.get("ip_address"),
+                    user_agent=raw.get("user_agent"),
+                    details=raw.get("details", {}),
+                ))
+            except (ValueError, KeyError):
+                continue
+        return events
+
+
 class AuditLogger:
-    """Audit logging system with integrity protection"""
-    
+    """Audit logging system with integrity protection.
+
+    By default uses :class:`_PersistentStorageAdapter` which delegates to
+    the durable JSONL-based :class:`PersistentAuditLogger` with automatic
+    rotation and compression.  Falls back to :class:`InMemoryAuditStorage`
+    if persistent storage cannot be initialised.
+    """
+
     def __init__(self, storage_backend: Optional[Any] = None):
-        self.storage = storage_backend or InMemoryAuditStorage()
+        if storage_backend is not None:
+            self.storage = storage_backend
+        else:
+            try:
+                self.storage = _PersistentStorageAdapter()
+                logger.info("Audit logger using persistent JSONL storage")
+            except Exception as exc:
+                logger.warning(
+                    "Failed to initialise persistent audit storage, "
+                    "falling back to in-memory: %s", exc,
+                )
+                self.storage = InMemoryAuditStorage()
         self.hash_chain = HashChain()
         self.config = get_security_config()
     
