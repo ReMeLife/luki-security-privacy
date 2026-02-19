@@ -375,3 +375,8 @@ class AnomalyMonitor:
 
 # Global instance
 anomaly_monitor = AnomalyMonitor()
+
+
+def get_anomaly_detector() -> AccessPatternAnalyzer:
+    """Return the global anomaly detector (access pattern analyser)."""
+    return anomaly_monitor.access_analyzer
