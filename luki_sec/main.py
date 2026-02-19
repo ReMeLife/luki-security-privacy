@@ -33,6 +33,8 @@ from .crypto.encrypt import (
 from .api import insights
 from .middleware import correlation_middleware, request_logging_middleware
 from .operational_metrics import operational_metrics
+from .policy.audit import get_audit_logger, AuditEventType
+from .policy.decision_cache import get_decision_cache
 
 # Configure structured logging
 structlog.configure(
@@ -238,9 +240,12 @@ async def update_consent(user_id: str, consent_data: dict):
     """Update user consent preferences"""
     if not consent_manager:
         raise HTTPException(status_code=503, detail="Consent manager not available")
-    
+
     try:
         result = await consent_manager.update_consent(user_id, consent_data)
+        # Invalidate cached policy decisions so the new consent takes
+        # effect immediately instead of waiting for TTL expiry.
+        get_decision_cache().invalidate_user(user_id)
         logger.info("Consent updated", user_id=user_id)
         return {"status": "success", "consent": result}
     except Exception as e:
@@ -265,9 +270,12 @@ async def update_privacy_settings(user_id: str, privacy_settings: dict):
     """Update user privacy settings"""
     if not privacy_controls:
         raise HTTPException(status_code=503, detail="Privacy controls not available")
-    
+
     try:
         result = await privacy_controls.update_settings(user_id, privacy_settings)
+        # Invalidate cached policy decisions – privacy flags affect
+        # which scopes are allowed.
+        get_decision_cache().invalidate_user(user_id)
         logger.info("Privacy settings updated", user_id=user_id)
         return {"status": "success", "settings": result}
     except Exception as e:
@@ -345,6 +353,14 @@ async def enforce_policy(request: PolicyEnforcementRequest):
             status_code=400,
             detail={"error": "invalid_scopes", "scopes": invalid_scopes},
         )
+
+    # Check the decision cache for a recent ALLOW for this exact
+    # user + scopes + role combination (short TTL, ~60 s).
+    _dcache = get_decision_cache()
+    _scope_key = frozenset(s.value for s in scopes)
+    cached_decision = _dcache.get(request.user_id, _scope_key, request.requester_role)
+    if cached_decision is not None:
+        return cached_decision
     if privacy_controls is not None:
         try:
             privacy_settings = await privacy_controls.get_settings(request.user_id)
@@ -444,11 +460,13 @@ async def enforce_policy(request: PolicyEnforcementRequest):
                     requester_role=request.requester_role,
                     scopes=[s.value for s in scopes],
                 )
-                return {
+                _result = {
                     "allowed": True,
                     "scopes_checked": [s.value for s in scopes],
                     "reason": "default_allow_processing_no_consent_record",
                 }
+                _dcache.put(request.user_id, _scope_key, request.requester_role, _result)
+                return _result
     except Exception as exc:
         logger.error(
             "Processing default-allow check failed; falling back to strict enforcement",
@@ -503,11 +521,13 @@ async def enforce_policy(request: PolicyEnforcementRequest):
                     user_id=request.user_id,
                     requester_role=request.requester_role,
                 )
-                return {
+                _result = {
                     "allowed": True,
                     "scopes_checked": [s.value for s in scopes],
                     "reason": "default_allow_elr_no_consent_record",
                 }
+                _dcache.put(request.user_id, _scope_key, request.requester_role, _result)
+                return _result
     except Exception as exc:
         # On any unexpected failure in the default-allow branch,
         # fall back to normal consent enforcement.
@@ -518,16 +538,42 @@ async def enforce_policy(request: PolicyEnforcementRequest):
             error=str(exc),
         )
 
+    audit = get_audit_logger()
+
     try:
         engine.enforce_scope(request.user_id, request.requester_role, scopes)
         operational_metrics.record_policy_decision(allowed=True)
-        return {
+
+        # Record successful policy check in audit trail
+        audit.log_event(
+            event_type=AuditEventType.CONSENT_CHECK,
+            action="enforce_policy",
+            outcome="success",
+            user_id=request.user_id,
+            role=request.requester_role,
+            details={
+                "scopes": [s.value for s in scopes],
+                "context": request.context or {},
+            },
+        )
+
+        _result = {
             "allowed": True,
             "scopes_checked": [s.value for s in scopes],
             "reason": "consent_valid",
         }
+        _dcache.put(request.user_id, _scope_key, request.requester_role, _result)
+        return _result
     except ConsentExpiredError as exc:
         operational_metrics.record_policy_decision(allowed=False)
+        audit.log_event(
+            event_type=AuditEventType.CONSENT_CHECK,
+            action="enforce_policy",
+            outcome="denied",
+            user_id=request.user_id,
+            role=request.requester_role,
+            details={"reason": "consent_expired", "scopes": [s.value for s in scopes]},
+        )
         raise HTTPException(
             status_code=403,
             detail={
@@ -538,6 +584,14 @@ async def enforce_policy(request: PolicyEnforcementRequest):
         )
     except ConsentDeniedError as exc:
         operational_metrics.record_policy_decision(allowed=False)
+        audit.log_event(
+            event_type=AuditEventType.CONSENT_CHECK,
+            action="enforce_policy",
+            outcome="denied",
+            user_id=request.user_id,
+            role=request.requester_role,
+            details={"reason": "consent_denied", "scopes": [s.value for s in scopes]},
+        )
         raise HTTPException(
             status_code=403,
             detail={
@@ -559,10 +613,12 @@ async def enforce_policy(request: PolicyEnforcementRequest):
 async def get_metrics():
     """Operational metrics for consent, encryption, and policy enforcement.
 
-    Returns counters, latency histograms, and policy allow/deny ratios
-    collected by the :mod:`operational_metrics` module.
+    Returns counters, latency histograms, policy allow/deny ratios,
+    and policy decision cache statistics.
     """
-    return operational_metrics.get_metrics()
+    metrics = operational_metrics.get_metrics()
+    metrics["policy_decision_cache"] = get_decision_cache().get_stats()
+    return metrics
 
 
 @app.get("/")
