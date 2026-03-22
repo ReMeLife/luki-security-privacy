@@ -199,7 +199,7 @@ class InputSanitizer:
         email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
         
         if not re.match(email_pattern, email):
-            logger.warning(f"Invalid email format: {email}")
+            logger.warning("Invalid email format detected")
             return None
         
         return email
