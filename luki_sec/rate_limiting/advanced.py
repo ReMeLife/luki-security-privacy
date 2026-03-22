@@ -5,7 +5,7 @@ Implements token bucket, sliding window, and adaptive rate limiting
 
 import time
 import logging
-from typing import Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 from datetime import datetime, timedelta
 from enum import Enum
 from dataclasses import dataclass
@@ -55,7 +55,7 @@ class TokenBucketLimiter:
         self.tokens = float(capacity)
         self.last_refill = time.time()
     
-    def allow_request(self, tokens: int = 1) -> Tuple[bool, Dict[str, any]]:
+    def allow_request(self, tokens: int = 1) -> Tuple[bool, Dict[str, Any]]:
         """
         Check if request is allowed
         
@@ -95,7 +95,7 @@ class TokenBucketLimiter:
                     "retry_after": int(wait_seconds) + 1
                 }
     
-    def get_status(self) -> Dict[str, any]:
+    def get_status(self) -> Dict[str, Any]:
         """Get current bucket status"""
         with self._lock:
             return {
@@ -125,7 +125,7 @@ class SlidingWindowLimiter:
         self.window_seconds = window_seconds
         self.requests: list[float] = []  # Timestamps
     
-    def allow_request(self) -> Tuple[bool, Dict[str, any]]:
+    def allow_request(self) -> Tuple[bool, Dict[str, Any]]:
         """
         Check if request is allowed
         
@@ -158,7 +158,7 @@ class SlidingWindowLimiter:
                     "retry_after": retry_after
                 }
     
-    def get_status(self) -> Dict[str, any]:
+    def get_status(self) -> Dict[str, Any]:
         """Get current status"""
         with self._lock:
             now = time.time()
@@ -193,7 +193,7 @@ class FixedWindowLimiter:
         self.window_start = time.time()
         self.request_count = 0
     
-    def allow_request(self) -> Tuple[bool, Dict[str, any]]:
+    def allow_request(self) -> Tuple[bool, Dict[str, Any]]:
         """
         Check if request is allowed
         
@@ -228,7 +228,7 @@ class FixedWindowLimiter:
                     "retry_after": reset_seconds
                 }
     
-    def get_status(self) -> Dict[str, any]:
+    def get_status(self) -> Dict[str, Any]:
         """Get current status"""
         with self._lock:
             now = time.time()
@@ -271,9 +271,9 @@ class AdaptiveRateLimiter:
         self.penalty_multiplier = penalty_multiplier
         
         # Per-identifier tracking
-        self.identifiers: Dict[str, Dict[str, any]] = {}
+        self.identifiers: Dict[str, Dict[str, Any]] = {}
     
-    def allow_request(self, identifier: str) -> Tuple[bool, Dict[str, any]]:
+    def allow_request(self, identifier: str) -> Tuple[bool, Dict[str, Any]]:
         """
         Check if request is allowed
         
@@ -351,7 +351,7 @@ class AdaptiveRateLimiter:
                     "violations": state["violations"]
                 }
     
-    def get_status(self, identifier: str) -> Optional[Dict[str, any]]:
+    def get_status(self, identifier: str) -> Optional[Dict[str, Any]]:
         """Get status for identifier"""
         with self._lock:
             if identifier not in self.identifiers:
