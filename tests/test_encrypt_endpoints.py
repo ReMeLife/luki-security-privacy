@@ -1,4 +1,4 @@
-git commit -m "Stabilise encrypt/decrypt endpoint tests by initialising encryption service""""Tests for /encrypt and /decrypt endpoints in the security-privacy service."""
+"""Tests for /encrypt and /decrypt endpoints in the security-privacy service."""
 
 from __future__ import annotations
 
