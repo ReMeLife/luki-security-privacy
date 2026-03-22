@@ -4,15 +4,9 @@ AES-GCM encryption for data at rest and in transit
 """
 
 import os
-from typing import TYPE_CHECKING
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-
-if TYPE_CHECKING:
-    pass
 from cryptography.exceptions import InvalidTag
 import structlog
-
-from ..config import get_security_config
 
 logger = structlog.get_logger(__name__)
 

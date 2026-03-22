@@ -5,7 +5,6 @@ Privacy protection through data generalization and suppression
 
 from typing import List, Dict, Any, Set, Tuple, Optional
 from collections import defaultdict, Counter
-import pandas as pd
 import structlog
 
 logger = structlog.get_logger(__name__)

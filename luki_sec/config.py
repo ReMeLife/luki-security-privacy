@@ -3,9 +3,7 @@ Security configuration management for LUKi
 Toggles for DP, FL, crypto backends and security settings
 """
 
-import os
 from enum import Enum
-from typing import Optional
 from pydantic_settings import BaseSettings
 from pydantic import Field
 

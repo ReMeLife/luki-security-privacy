@@ -3,11 +3,10 @@ LUKi Security & Privacy Module - FastAPI Application
 Provides consent management, privacy controls, and security features
 """
 
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from typing import List, Dict, Any
-import logging
 import structlog
 import json
 import base64

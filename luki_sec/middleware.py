@@ -9,7 +9,6 @@ Provides:
   audit trail automatically.
 """
 
-import logging
 import time
 import uuid
 from contextvars import ContextVar

@@ -9,7 +9,7 @@ import json
 import structlog
 from sqlalchemy import create_engine, Column, String, DateTime, Text, Boolean
 from sqlalchemy.orm import declarative_base
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import sessionmaker
 
 from .models import ConsentRecord, ConsentBundle, ConsentScope, ConsentStatus
 
