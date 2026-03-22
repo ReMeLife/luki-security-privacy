@@ -224,3 +224,9 @@ secrets/
 logs/
 .cache/
 .ipynb_checkpoints/
+.DS_Store
+
+# Railway deployment (local-only, not needed on GitHub)
+railway.toml
+.railwayignore
+requirements-railway.txt
