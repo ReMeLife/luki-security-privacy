@@ -11,7 +11,7 @@ import threading
 import time
 import logging
 from typing import Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from collections import defaultdict
 from functools import wraps
 
@@ -31,7 +31,7 @@ class OperationalMetrics:
     def __init__(self, histogram_limit: int = 500) -> None:
         self._lock = threading.Lock()
         self._histogram_limit = histogram_limit
-        self._start_time = datetime.utcnow()
+        self._start_time = datetime.now(timezone.utc)
 
         # Per-operation counters
         self._calls: Dict[str, int] = defaultdict(int)
@@ -80,7 +80,7 @@ class OperationalMetrics:
     def get_metrics(self) -> Dict[str, Any]:
         """Return a structured snapshot of all collected metrics."""
         with self._lock:
-            uptime = (datetime.utcnow() - self._start_time).total_seconds()
+            uptime = (datetime.now(timezone.utc) - self._start_time).total_seconds()
 
             operations: Dict[str, Any] = {}
             for op in set(list(self._calls.keys()) + list(self._latencies.keys())):
@@ -104,7 +104,7 @@ class OperationalMetrics:
 
             return {
                 "uptime_seconds": round(uptime, 1),
-                "collected_at": datetime.utcnow().isoformat(),
+                "collected_at": datetime.now(timezone.utc).isoformat(),
                 "operations": operations,
                 "policy": {
                     "allowed": self._policy_allowed,
@@ -121,7 +121,7 @@ class OperationalMetrics:
             self._latencies.clear()
             self._policy_allowed = 0
             self._policy_denied = 0
-            self._start_time = datetime.utcnow()
+            self._start_time = datetime.now(timezone.utc)
 
 
 # Global metrics instance

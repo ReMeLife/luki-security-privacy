@@ -4,7 +4,7 @@ JWT token creation, verification, and management
 """
 
 import jwt
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, Optional
 import structlog
 
@@ -49,7 +49,7 @@ def create_jwt(payload: Dict[str, Any], secret_key: str,
         expires_in_minutes = expires_in_minutes or config.jwt_expiry_minutes
         
         # Add standard claims
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         token_payload = {
             **payload,
             'iat': now,  # Issued at

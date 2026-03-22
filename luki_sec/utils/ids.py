@@ -5,9 +5,9 @@ Secure, unique identifier generation for users, sessions, and traces
 
 import uuid
 import secrets
-import string
+
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 import structlog
 
 logger = structlog.get_logger(__name__)
@@ -15,7 +15,7 @@ logger = structlog.get_logger(__name__)
 
 def generate_user_id(prefix: str = "user") -> str:
     """Generate unique user ID"""
-    timestamp = datetime.utcnow().strftime("%Y%m%d")
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d")
     random_part = secrets.token_hex(8)
     return f"{prefix}_{timestamp}_{random_part}"
 

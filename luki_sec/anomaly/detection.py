@@ -5,7 +5,7 @@ Detects unusual access patterns and potential security threats
 
 import logging
 from typing import Dict, List, Optional, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 from dataclasses import dataclass
 
@@ -49,7 +49,7 @@ class AccessPatternAnalyzer:
             timestamp: Access timestamp
         """
         if timestamp is None:
-            timestamp = datetime.utcnow()
+            timestamp = datetime.now(timezone.utc)
         
         access_event = {
             "resource": resource,
@@ -117,7 +117,7 @@ class AccessPatternAnalyzer:
             "typical_hours": [h for h, count in hour_distribution.items() if count > len(history) * 0.1],
             "typical_days": [d for d, count in day_distribution.items() if count > len(history) * 0.1],
             "common_resources": [r for r, count in resource_distribution.items() if count > len(history) * 0.05],
-            "created_at": datetime.utcnow().isoformat()
+            "created_at": datetime.now(timezone.utc).isoformat()
         }
         
         self.baseline_patterns[user_id] = baseline
@@ -154,7 +154,7 @@ class AccessPatternAnalyzer:
             return []
         
         # Get recent accesses
-        cutoff_time = datetime.utcnow() - timedelta(hours=recent_window_hours)
+        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=recent_window_hours)
         recent_accesses = [
             event for event in self.access_history.get(user_id, [])
             if datetime.fromisoformat(event["timestamp"]) > cutoff_time
@@ -171,8 +171,8 @@ class AccessPatternAnalyzer:
         
         if accesses_per_hour > expected_per_hour * 5:
             anomalies.append(AnomalyAlert(
-                alert_id=f"freq_{user_id}_{datetime.utcnow().timestamp()}",
-                timestamp=datetime.utcnow(),
+                alert_id=f"freq_{user_id}_{datetime.now(timezone.utc).timestamp()}",
+                timestamp=datetime.now(timezone.utc),
                 severity="high",
                 anomaly_type="unusual_frequency",
                 user_id=user_id,
@@ -193,8 +193,8 @@ class AccessPatternAnalyzer:
         
         if len(unusual_hours) > len(recent_accesses) * 0.5:
             anomalies.append(AnomalyAlert(
-                alert_id=f"time_{user_id}_{datetime.utcnow().timestamp()}",
-                timestamp=datetime.utcnow(),
+                alert_id=f"time_{user_id}_{datetime.now(timezone.utc).timestamp()}",
+                timestamp=datetime.now(timezone.utc),
                 severity="medium",
                 anomaly_type="unusual_access_time",
                 user_id=user_id,
@@ -214,8 +214,8 @@ class AccessPatternAnalyzer:
         
         if len(unusual_resources) > len(recent_accesses) * 0.7:
             anomalies.append(AnomalyAlert(
-                alert_id=f"resource_{user_id}_{datetime.utcnow().timestamp()}",
-                timestamp=datetime.utcnow(),
+                alert_id=f"resource_{user_id}_{datetime.now(timezone.utc).timestamp()}",
+                timestamp=datetime.now(timezone.utc),
                 severity="medium",
                 anomaly_type="unusual_resource_access",
                 user_id=user_id,
@@ -265,12 +265,12 @@ class ThreatDetector:
             AnomalyAlert if threshold exceeded, None otherwise
         """
         if timestamp is None:
-            timestamp = datetime.utcnow()
+            timestamp = datetime.now(timezone.utc)
         
         self.failed_attempts[user_id].append(timestamp)
         
         # Keep only last hour of attempts
-        cutoff = datetime.utcnow() - timedelta(hours=1)
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=1)
         self.failed_attempts[user_id] = [
             t for t in self.failed_attempts[user_id]
             if t > cutoff
@@ -281,7 +281,7 @@ class ThreatDetector:
         
         if recent_failures >= 5:
             # Block user temporarily
-            self.blocked_users[user_id] = datetime.utcnow() + timedelta(minutes=15)
+            self.blocked_users[user_id] = datetime.now(timezone.utc) + timedelta(minutes=15)
             
             logger.error(
                 f"User {user_id} temporarily blocked due to {recent_failures} failed attempts",
@@ -289,8 +289,8 @@ class ThreatDetector:
             )
             
             return AnomalyAlert(
-                alert_id=f"threat_{user_id}_{datetime.utcnow().timestamp()}",
-                timestamp=datetime.utcnow(),
+                alert_id=f"threat_{user_id}_{datetime.now(timezone.utc).timestamp()}",
+                timestamp=datetime.now(timezone.utc),
                 severity="critical",
                 anomaly_type="brute_force_attempt",
                 user_id=user_id,
@@ -312,7 +312,7 @@ class ThreatDetector:
         
         block_until = self.blocked_users[user_id]
         
-        if datetime.utcnow() >= block_until:
+        if datetime.now(timezone.utc) >= block_until:
             # Block expired
             del self.blocked_users[user_id]
             return False
@@ -360,7 +360,7 @@ class AnomalyMonitor:
         severity: Optional[str] = None
     ) -> List[AnomalyAlert]:
         """Get recent alerts"""
-        cutoff = datetime.utcnow() - timedelta(hours=hours)
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
         
         recent = [
             alert for alert in self.alerts

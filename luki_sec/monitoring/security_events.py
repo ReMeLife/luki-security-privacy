@@ -5,7 +5,7 @@ Real-time tracking and aggregation of security events
 
 import logging
 from typing import Dict, Any, Optional, List
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from collections import defaultdict, deque
 from enum import Enum
 from dataclasses import dataclass
@@ -141,7 +141,7 @@ class SecurityEventMonitor:
             event = SecurityEvent(
                 event_type=event_type,
                 severity=severity,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 user_id=user_id,
                 ip_address=ip_address,
                 user_agent=user_agent,
@@ -231,7 +231,7 @@ class SecurityEventMonitor:
     def _create_alert(self, event_type: SecurityEventType, message: str, events: List[SecurityEvent]):
         """Create security alert"""
         alert = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "event_type": event_type.value,
             "message": message,
             "event_count": len(events),
@@ -241,7 +241,7 @@ class SecurityEventMonitor:
         self._recent_alerts.append(alert)
         
         # Keep only recent alerts
-        cutoff = datetime.utcnow() - timedelta(hours=self.retention_hours)
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=self.retention_hours)
         self._recent_alerts = [
             a for a in self._recent_alerts
             if datetime.fromisoformat(a["timestamp"]) > cutoff
@@ -257,7 +257,7 @@ class SecurityEventMonitor:
     
     def _get_recent_events_for_user(self, user_id: str, minutes: int = 10) -> List[SecurityEvent]:
         """Get recent events for user"""
-        cutoff = datetime.utcnow() - timedelta(minutes=minutes)
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=minutes)
         return [
             e for e in self._events
             if e.user_id == user_id and e.timestamp > cutoff
@@ -265,7 +265,7 @@ class SecurityEventMonitor:
     
     def _get_recent_events_for_ip(self, ip_address: str, minutes: int = 10) -> List[SecurityEvent]:
         """Get recent events for IP"""
-        cutoff = datetime.utcnow() - timedelta(minutes=minutes)
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=minutes)
         return [
             e for e in self._events
             if e.ip_address == ip_address and e.timestamp > cutoff
@@ -274,7 +274,7 @@ class SecurityEventMonitor:
     def get_event_summary(self) -> Dict[str, Any]:
         """Get summary of security events"""
         with self._lock:
-            cutoff = datetime.utcnow() - timedelta(hours=self.retention_hours)
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=self.retention_hours)
             recent_events = [e for e in self._events if e.timestamp > cutoff]
             
             # Count by severity
@@ -306,7 +306,7 @@ class SecurityEventMonitor:
     def get_user_events(self, user_id: str, hours: int = 24) -> List[Dict[str, Any]]:
         """Get events for specific user"""
         with self._lock:
-            cutoff = datetime.utcnow() - timedelta(hours=hours)
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
             user_events = [
                 e for e in self._events
                 if e.user_id == user_id and e.timestamp > cutoff
@@ -317,7 +317,7 @@ class SecurityEventMonitor:
     def get_ip_events(self, ip_address: str, hours: int = 24) -> List[Dict[str, Any]]:
         """Get events for specific IP"""
         with self._lock:
-            cutoff = datetime.utcnow() - timedelta(hours=hours)
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
             ip_events = [
                 e for e in self._events
                 if e.ip_address == ip_address and e.timestamp > cutoff
@@ -328,7 +328,7 @@ class SecurityEventMonitor:
     def get_alerts(self, hours: int = 24) -> List[Dict[str, Any]]:
         """Get recent alerts"""
         with self._lock:
-            cutoff = datetime.utcnow() - timedelta(hours=hours)
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
             return [
                 a for a in self._recent_alerts
                 if datetime.fromisoformat(a["timestamp"]) > cutoff
@@ -337,7 +337,7 @@ class SecurityEventMonitor:
     def get_high_risk_users(self, threshold: int = 5) -> List[Dict[str, Any]]:
         """Get users with high number of security events"""
         with self._lock:
-            cutoff = datetime.utcnow() - timedelta(hours=24)
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
             recent_events = [e for e in self._events if e.timestamp > cutoff]
             
             user_counts = defaultdict(int)
@@ -366,7 +366,7 @@ class SecurityEventMonitor:
     def clear_old_events(self):
         """Clear events older than retention period"""
         with self._lock:
-            cutoff = datetime.utcnow() - timedelta(hours=self.retention_hours)
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=self.retention_hours)
             
             # Clear old events from deque
             while self._events and self._events[0].timestamp < cutoff:

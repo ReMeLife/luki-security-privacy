@@ -3,8 +3,8 @@ Attribute-Based Access Control (ABAC) for LUKi
 Context-aware access control using attributes and policies
 """
 
-from typing import Dict, Any, List, Optional, Callable
-from datetime import datetime, UTC, time
+from typing import Dict, Any, List, Optional
+from datetime import datetime, UTC
 from enum import Enum
 from pydantic import BaseModel, Field
 import structlog
@@ -263,7 +263,7 @@ class ABACManager:
         """Evaluate access request against all rules"""
         
         # Add environment attributes automatically
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         context.set_attribute(AttributeType.ENVIRONMENT, "current_hour", now.hour)
         context.set_attribute(AttributeType.ENVIRONMENT, "current_day", now.weekday())
         context.set_attribute(AttributeType.ENVIRONMENT, "is_weekday", now.weekday() < 5)

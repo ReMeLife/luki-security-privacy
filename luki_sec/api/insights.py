@@ -6,7 +6,7 @@ Provides endpoints for querying security metrics, trends, and anomalies.
 
 import logging
 from typing import Dict, Any, List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
@@ -142,7 +142,7 @@ async def query_security_events(
             events = monitor.get_user_events(user_id, hours=hours)
         else:
             # Get all recent events from internal storage
-            cutoff = datetime.utcnow() - timedelta(hours=hours)
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
             all_events = [
                 e.to_dict() for e in monitor._events
                 if e.timestamp > cutoff
@@ -257,7 +257,7 @@ async def get_security_trend(
         monitor = get_security_monitor()
         
         # Calculate time buckets
-        end_time = datetime.utcnow()
+        end_time = datetime.now(timezone.utc)
         start_time = end_time - timedelta(hours=hours)
         interval = timedelta(minutes=interval_minutes)
         
@@ -383,7 +383,7 @@ async def get_security_stats() -> Dict[str, Any]:
         return {
             "security_monitor": monitor.get_event_summary(),
             "audit_logger": audit_logger.get_statistics(),
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
         
     except Exception as e:

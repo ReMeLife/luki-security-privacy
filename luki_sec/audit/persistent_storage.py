@@ -13,7 +13,7 @@ import logging
 import json
 import gzip
 from typing import Dict, Any, List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from dataclasses import dataclass, asdict
 import threading
@@ -91,7 +91,7 @@ class PersistentAuditLogger:
         # In-memory buffer
         self._buffer: deque = deque(maxlen=buffer_size)
         self._lock = threading.Lock()
-        self._last_flush = datetime.utcnow()
+        self._last_flush = datetime.now(timezone.utc)
         
         # Statistics
         self.total_entries = 0
@@ -122,7 +122,7 @@ class PersistentAuditLogger:
             
             # Auto-flush if buffer is full or interval exceeded
             if (len(self._buffer) >= self.buffer_size or
-                (datetime.utcnow() - self._last_flush).total_seconds() >= self.flush_interval_seconds):
+                (datetime.now(timezone.utc) - self._last_flush).total_seconds() >= self.flush_interval_seconds):
                 self._flush()
     
     def log_dict(
@@ -152,7 +152,7 @@ class PersistentAuditLogger:
             correlation_id: Request correlation ID
         """
         entry = AuditEntry(
-            timestamp=datetime.utcnow().isoformat(),
+            timestamp=datetime.now(timezone.utc).isoformat(),
             event_type=event_type,
             user_id=user_id,
             action=action,
@@ -183,7 +183,7 @@ class PersistentAuditLogger:
                     f.write(entry.to_json() + '\n')
             
             self.total_flushes += 1
-            self._last_flush = datetime.utcnow()
+            self._last_flush = datetime.now(timezone.utc)
             
             logger.debug(
                 f"Flushed {len(entries_to_write)} audit entries to {self.current_file.name}",
@@ -207,7 +207,7 @@ class PersistentAuditLogger:
         
         # Create new file if needed
         if self.current_file is None:
-            timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+            timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
             self.current_file = self.log_directory / f"audit_{timestamp}.jsonl"
             logger.info(f"Created new audit log file: {self.current_file.name}")
         
@@ -236,7 +236,7 @@ class PersistentAuditLogger:
     
     def _cleanup_old_files(self):
         """Remove files older than retention period"""
-        cutoff_date = datetime.utcnow() - timedelta(days=self.max_age_days)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=self.max_age_days)
         
         for log_file in self.log_directory.glob("audit_*.jsonl*"):
             try:
