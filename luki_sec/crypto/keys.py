@@ -5,7 +5,7 @@ Key generation, rotation, and secure storage
 
 import os
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Optional, Any
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -18,7 +18,7 @@ from ..config import get_security_config
 logger = structlog.get_logger(__name__)
 
 
-class KeyError(Exception):
+class KeyManagementError(Exception):
     """Base exception for key management errors"""
     pass
 
@@ -67,7 +67,7 @@ class KeyManager:
         # Cache the derived key
         self.derived_keys[purpose] = derived_key
         self.key_metadata[purpose] = {
-            'created_at': datetime.utcnow(),
+            'created_at': datetime.now(timezone.utc),
             'salt': salt,
             'purpose': purpose
         }
@@ -118,7 +118,7 @@ class KeyManager:
                 }
                 for purpose, metadata in self.key_metadata.items()
             },
-            'exported_at': datetime.utcnow().isoformat()
+            'exported_at': datetime.now(timezone.utc).isoformat()
         }
 
 
@@ -164,7 +164,7 @@ class KeyRotationScheduler:
         created_at = metadata['created_at']
         rotation_interval = self.rotation_schedule.get(purpose, timedelta(days=365))
         
-        return datetime.utcnow() - created_at > rotation_interval
+        return datetime.now(timezone.utc) - created_at > rotation_interval
     
     def get_rotation_status(self) -> Dict[str, Dict[str, Any]]:
         """Get rotation status for all keys"""
@@ -180,7 +180,7 @@ class KeyRotationScheduler:
                 'created_at': created_at.isoformat(),
                 'next_rotation': next_rotation.isoformat(),
                 'should_rotate': self.should_rotate(purpose),
-                'days_until_rotation': (next_rotation - datetime.utcnow()).days
+                'days_until_rotation': (next_rotation - datetime.now(timezone.utc)).days
             }
         
         return status
@@ -217,7 +217,7 @@ def rotate_keys() -> Dict[str, Any]:
                 
                 rotation_results[purpose] = {
                     'status': 'rotated',
-                    'rotated_at': datetime.utcnow().isoformat()
+                    'rotated_at': datetime.now(timezone.utc).isoformat()
                 }
                 
                 logger.info("Key rotated", purpose=purpose)
